@@ -6,16 +6,13 @@ from .models import Rule
 class RuleAdmin(admin.ModelAdmin):
 
     list_display = (
-        "name",
-        "workflow",
-        "priority",
-        "is_active",
-        "created_at",
+        "id",
+        "step",
+        "condition",
+        "next_step",
+        "priority"
     )
 
-    list_filter = (
-        "workflow",
-        "is_active"
-    )
+    list_filter = ("step",)
 
-    search_fields = ("name",)
+    ordering = ("priority",)

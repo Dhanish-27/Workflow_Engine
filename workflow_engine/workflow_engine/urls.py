@@ -10,9 +10,12 @@ urlpatterns = [
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 
-    # Register New User
+    # Accounts
     path("api/accounts/", include("apps.accounts.urls")),
 
-    # Rules 
+    # Workflow Engine
+    path("api/workflows/", include("apps.workflows.urls")),
+    path("api/steps/", include("apps.steps.urls")),
     path("api/rules/", include("apps.rules.urls")),
+    path("api/executions/", include("apps.executions.urls")),
 ]

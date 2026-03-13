@@ -1,7 +1,7 @@
 from rest_framework.permissions import BasePermission
 
 
-class CanManageRules(BasePermission):
+class CanManageSteps(BasePermission):
 
     def has_permission(self, request, view):
 

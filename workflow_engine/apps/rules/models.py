@@ -6,30 +6,30 @@ class Rule(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    workflow = models.ForeignKey(
-        "workflows.Workflow",
+    step = models.ForeignKey(
+        "steps.Step",
         on_delete=models.CASCADE,
         related_name="rules"
     )
 
-    name = models.CharField(max_length=255)
+    condition = models.TextField()
 
-    description = models.TextField(blank=True)
+    next_step = models.ForeignKey(
+        "steps.Step",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="next_rules"
+    )
 
-    # dynamic condition structure
-    conditions = models.JSONField()
-
-    # dynamic action structure
-    actions = models.JSONField()
-
-    priority = models.IntegerField(default=1)
-
-    is_active = models.BooleanField(default=True)
+    priority = models.IntegerField()
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["priority"]
 
     def __str__(self):
-        return self.name
+        return self.condition

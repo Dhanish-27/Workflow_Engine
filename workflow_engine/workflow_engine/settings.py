@@ -33,9 +33,10 @@ INSTALLED_APPS = [
     "apps.steps",
     "apps.rules",
     "apps.executions",
-
-    # Register New User
     "apps.accounts",
+    "apps.common",
+    "apps.emails",
+    "apps.notifications",
 ]
 
 

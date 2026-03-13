@@ -1,7 +1,7 @@
 from rest_framework.routers import DefaultRouter
-from .views import RuleViewSet
+from .views import StepViewSet
 
 router = DefaultRouter()
-router.register("rules", RuleViewSet)
+router.register("steps", StepViewSet)
 
 urlpatterns = router.urls

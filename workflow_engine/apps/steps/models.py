@@ -27,9 +27,10 @@ class Step(models.Model):
 
     order = models.IntegerField()
 
-    metadata = models.JSONField(blank=True, null=True)
+    metadata = models.JSONField(default=dict)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

@@ -12,19 +12,6 @@ class RuleViewSet(ModelViewSet):
 
     serializer_class = RuleSerializer
 
-    permission_classes = [IsAuthenticated, CanManageRules]
+    permission_classes = [CanManageRules]
 
-    filterset_fields = [
-        "workflow",
-        "is_active"
-    ]
-
-    search_fields = [
-        "name",
-        "description"
-    ]
-
-    ordering_fields = [
-        "priority",
-        "created_at"
-    ]
+    filterset_fields = ["step"]
