@@ -1,102 +1,128 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
-// Create axios instance with default config
 const api = axios.create({
-    baseURL: API_URL,
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-// Add token to requests if available
+// Request interceptor to add JWT token
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('accessToken');
+        const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
     },
-    (error) => Promise.reject(error)
-);
-
-// Handle token refresh on 401 errors
-api.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-        const originalRequest = error.config;
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-
-            try {
-                const refreshToken = localStorage.getItem('refreshToken');
-                if (refreshToken) {
-                    const response = await axios.post(`${API_URL}/token/refresh/`, {
-                        refresh: refreshToken,
-                    });
-
-                    const { access } = response.data;
-                    localStorage.setItem('accessToken', access);
-
-                    originalRequest.headers.Authorization = `Bearer ${access}`;
-                    return api(originalRequest);
-                }
-            } catch (refreshError) {
-                // Refresh failed, clear tokens and redirect to login
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                window.location.href = '/login';
-                return Promise.reject(refreshError);
-            }
-        }
-
+    (error) => {
         return Promise.reject(error);
     }
 );
 
-// Auth Service
-export const authService = {
-    // Login user
-    login: async (username, password) => {
-        const response = await api.post('/token/', { username, password });
-        const { access, refresh } = response.data;
+// Response interceptor to handle errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
 
-        localStorage.setItem('accessToken', access);
-        localStorage.setItem('refreshToken', refresh);
+// Auth API - Using email-based login
+export const authAPI = {
+    login: (credentials) => api.post('/accounts/login/', credentials),
+    logout: () => api.post('/accounts/logout/'),
+    register: (data) => api.post('/accounts/register/', data),
+    me: () => api.get('/accounts/me/'),
+    refreshToken: (refresh) => api.post('/api/token/refresh/', { refresh }),
+};
 
-        return response.data;
-    },
+// Users API
+export const usersAPI = {
+    list: (params) => api.get('/accounts/users/', { params }),
+    get: (id) => api.get(`/accounts/users/${id}/`),
+    create: (data) => api.post('/accounts/users/', data),
+    update: (id, data) => api.patch(`/accounts/users/${id}/`, data),
+    delete: (id) => api.delete(`/accounts/users/${id}/`),
+    changePassword: (id, data) => api.post(`/accounts/users/${id}/change_password/`, data),
+};
 
-    // Register new user
-    register: async (userData) => {
-        const response = await api.post('/accounts/register/', userData);
-        return response.data;
-    },
+// Workflows API
+export const workflowsAPI = {
+    list: (params) => api.get('/workflows/', { params }),
+    get: (id) => api.get(`/workflows/${id}/`),
+    create: (data) => api.post('/workflows/', data),
+    update: (id, data) => api.patch(`/workflows/${id}/`, data),
+    delete: (id) => api.delete(`/workflows/${id}/`),
+};
 
-    // Logout user
-    logout: () => {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-    },
+// Workflow Fields API
+export const workflowFieldsAPI = {
+    list: (workflowId) => api.get('/workflow-fields/', { params: { workflow: workflowId } }),
+    get: (id) => api.get(`/workflow-fields/${id}/`),
+    create: (data) => api.post('/workflow-fields/', data),
+    update: (id, data) => api.patch(`/workflow-fields/${id}/`, data),
+    delete: (id) => api.delete(`/workflow-fields/${id}/`),
+    reorder: (id, data) => api.post(`/workflow-fields/${id}/reorder/`, data),
+};
 
-    // Get current user info (requires authenticated request)
-    getCurrentUser: async () => {
-        const response = await api.get('/accounts/user/');
-        return response.data;
-    },
+// Steps API
+export const stepsAPI = {
+    list: (params) => api.get('/steps/', { params }),
+    get: (id) => api.get(`/steps/${id}/`),
+    create: (data) => api.post('/steps/', data),
+    update: (id, data) => api.patch(`/steps/${id}/`, data),
+    delete: (id) => api.delete(`/steps/${id}/`),
+};
 
-    // Check if user is authenticated
-    isAuthenticated: () => {
-        return !!localStorage.getItem('accessToken');
-    },
+// Rules API
+export const rulesAPI = {
+    list: (params) => api.get('/rules/', { params }),
+    get: (id) => api.get(`/rules/${id}/`),
+    create: (data) => api.post('/rules/', data),
+    update: (id, data) => api.patch(`/rules/${id}/`, data),
+    delete: (id) => api.delete(`/rules/${id}/`),
+};
 
-    // Get access token
-    getAccessToken: () => {
-        return localStorage.getItem('accessToken');
-    },
+// Executions API
+export const executionsAPI = {
+    list: (params) => api.get('/executions/', { params }),
+    get: (id) => api.get(`/executions/${id}/`),
+    create: (data) => api.post('/executions/', data),
+    approve: (id, data) => api.post(`/executions/${id}/approve/`, data),
+    reject: (id, data) => api.post(`/executions/${id}/reject/`, data),
+    getLogs: (id) => api.get(`/executions/${id}/logs/`),
+    getTimeline: (id) => api.get(`/executions/${id}/timeline/`),
+};
+
+// Approvals API
+export const approvalsAPI = {
+    list: (params) => api.get('/approvals/', { params }),
+    get: (id) => api.get(`/approvals/${id}/`),
+    approve: (id, data) => api.post(`/approvals/${id}/approve/`, data),
+    reject: (id, data) => api.post(`/approvals/${id}/reject/`, data),
+};
+
+// Dashboard API
+export const dashboardAPI = {
+    stats: () => api.get('/dashboard/stats/'),
+    chartData: (params) => api.get('/dashboard/chart-data/', { params }),
+    recentExecutions: (params) => api.get('/dashboard/recent-executions/', { params }),
+};
+
+// Notifications API
+export const notificationsAPI = {
+    list: (params) => api.get('/notifications/', { params }),
+    markAsRead: (id) => api.post(`/notifications/${id}/read/`),
+    markAllAsRead: () => api.post('/notifications/mark_all_read/'),
 };
 
 export default api;
