@@ -8,6 +8,7 @@ import {
     Login,
     Register,
     Dashboard,
+    Profile,
     Users,
     Workflows,
     WorkflowConfigure,
@@ -62,6 +63,9 @@ function App() {
                 <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
                     {/* Dashboard - All roles */}
                     <Route path="/dashboard" element={<Dashboard />} />
+
+                    {/* Profile - All authenticated users */}
+                    <Route path="/profile" element={<Profile />} />
 
                     {/* Admin Routes - Full system control */}
                     <Route path="/users" element={

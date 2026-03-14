@@ -12,12 +12,14 @@ import {
     X,
     DollarSign,
     Award,
+    User,
 } from 'lucide-react';
 import { cn } from '../../utils';
 import { useUIStore, useAuthStore } from '../../store';
 
 const adminMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/users', icon: Users, label: 'Users' },
     { path: '/workflows', icon: GitBranch, label: 'Workflows' },
     { path: '/steps', icon: ListOrdered, label: 'Steps' },
@@ -30,6 +32,7 @@ const adminMenuItems = [
 
 const managerMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/approvals', icon: CheckSquare, label: 'My Approvals' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
@@ -38,6 +41,7 @@ const managerMenuItems = [
 
 const financeMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/approvals', icon: DollarSign, label: 'Finance Approvals' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
@@ -46,6 +50,7 @@ const financeMenuItems = [
 
 const ceoMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/approvals', icon: Award, label: 'Final Approvals' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
@@ -54,6 +59,7 @@ const ceoMenuItems = [
 
 const employeeMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
     { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
 ];
