@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import {
     ArrowLeft,
     Plus,
@@ -9,10 +9,151 @@ import {
     GripVertical,
     ListOrdered,
     BookOpen,
+    GitBranch,
+    Save,
+    X,
+    AlertCircle,
+    CheckCircle,
+    ChevronDown,
+    ChevronRight,
 } from 'lucide-react';
+import ReactFlow, {
+    Background,
+    Controls,
+    MiniMap,
+    addEdge,
+    useNodesState,
+    useEdgesState,
+    Handle,
+    Position,
+    MarkerType,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
 import { workflowsAPI, workflowFieldsAPI, stepsAPI, rulesAPI } from '../services/api';
 import { Button, Card, Modal, Input, Select, DataTable, Badge, EmptyState } from '../components/ui';
 import { cn } from '../utils';
+
+// ============================================
+// CONSTANTS & UTILITIES
+// ============================================
+
+const FIELD_TYPES = [
+    { value: 'text', label: 'Text' },
+    { value: 'number', label: 'Number' },
+    { value: 'dropdown', label: 'Dropdown' },
+    { value: 'date', label: 'Date' },
+    { value: 'boolean', label: 'Boolean' },
+];
+
+const STEP_TYPES = [
+    { value: 'task', label: 'Task' },
+    { value: 'approval', label: 'Approval' },
+    { value: 'notification', label: 'Notification' },
+];
+
+const APPROVAL_TYPES = [
+    { value: 'general', label: 'General Approval' },
+    { value: 'manager_approval', label: 'Manager Approval' },
+    { value: 'finance_approval', label: 'Finance Approval' },
+    { value: 'ceo_approval', label: 'CEO Approval' },
+];
+
+const ROLES = [
+    { value: 'employee', label: 'Employee' },
+    { value: 'manager', label: 'Manager' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'finance', label: 'Finance' },
+    { value: 'hr', label: 'HR' },
+];
+
+const OPERATORS_BY_TYPE = {
+    text: [
+        { value: 'equals', label: 'equals' },
+        { value: 'not_equals', label: 'not equals' },
+        { value: 'contains', label: 'contains' },
+    ],
+    number: [
+        { value: 'eq', label: '==' },
+        { value: 'neq', label: '!=' },
+        { value: 'gt', label: '>' },
+        { value: 'gte', label: '>=' },
+        { value: 'lt', label: '<' },
+        { value: 'lte', label: '<=' },
+    ],
+    dropdown: [
+        { value: 'equals', label: 'equals' },
+        { value: 'not_equals', label: 'not equals' },
+    ],
+    date: [
+        { value: 'eq', label: 'on' },
+        { value: 'before', label: 'before' },
+        { value: 'after', label: 'after' },
+    ],
+    boolean: [
+        { value: 'is_true', label: 'is true' },
+        { value: 'is_false', label: 'is false' },
+    ],
+};
+
+// Custom Node for React Flow
+const StepNode = ({ data, selected }) => {
+    const stepTypeColors = {
+        task: 'bg-blue-100 border-blue-500 dark:bg-blue-900/30 dark:border-blue-600',
+        approval: 'bg-yellow-100 border-yellow-500 dark:bg-yellow-900/30 dark:border-yellow-600',
+        notification: 'bg-purple-100 border-purple-500 dark:bg-purple-900/30 dark:border-purple-600',
+    };
+
+    const stepTypeLabels = {
+        task: 'Task',
+        approval: 'Approval',
+        notification: 'Notification',
+    };
+
+    return (
+        <div className={cn(
+            'px-4 py-3 rounded-lg border-2 shadow-md min-w-[180px]',
+            stepTypeColors[data.stepType] || 'bg-gray-100 border-gray-400',
+            selected && 'ring-2 ring-primary-500 ring-offset-2'
+        )}>
+            <Handle type="target" position={Position.Top} className="!bg-gray-400" />
+            <div className="text-sm font-semibold text-gray-900 dark:text-dark-text">
+                {data.label}
+            </div>
+            <div className="text-xs text-gray-600 dark:text-dark-muted mt-1">
+                {stepTypeLabels[data.stepType] || data.stepType}
+            </div>
+            {data.approvalType && (
+                <div className="text-xs text-gray-500 dark:text-dark-muted mt-1">
+                    {data.approvalType}
+                </div>
+            )}
+            <Handle type="source" position={Position.Bottom} className="!bg-gray-400" />
+        </div>
+    );
+};
+
+const nodeTypes = { stepNode: StepNode };
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 const WorkflowConfigure = () => {
     const { id } = useParams();
@@ -40,8 +181,9 @@ const WorkflowConfigure = () => {
 
     const tabs = [
         { id: 'fields', label: 'Fields', icon: ListOrdered },
-        { id: 'steps', label: 'Steps', icon: ListOrdered },
+        { id: 'steps', label: 'Steps', icon: GripVertical },
         { id: 'rules', label: 'Rules', icon: BookOpen },
+        { id: 'visual', label: 'Visual Builder', icon: GitBranch },
     ];
 
     return (
@@ -62,13 +204,13 @@ const WorkflowConfigure = () => {
 
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-dark-border">
-                <nav className="flex gap-4">
+                <nav className="flex gap-4 overflow-x-auto">
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={cn(
-                                'flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors',
+                                'flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap',
                                 activeTab === tab.id
                                     ? 'border-primary-600 text-primary-600 dark:text-primary-400'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-dark-muted'
@@ -82,22 +224,28 @@ const WorkflowConfigure = () => {
             </div>
 
             {/* Tab Content */}
-            {activeTab === 'fields' && <WorkflowFields workflowId={id} />}
-            {activeTab === 'steps' && <WorkflowSteps workflowId={id} />}
-            {activeTab === 'rules' && <WorkflowRules workflowId={id} />}
+            {activeTab === 'fields' && <WorkflowFieldsTab workflowId={id} />}
+            {activeTab === 'steps' && <WorkflowStepsTab workflowId={id} />}
+            {activeTab === 'rules' && <WorkflowRulesTab workflowId={id} />}
+            {activeTab === 'visual' && <VisualBuilderTab workflowId={id} />}
         </div>
     );
 };
 
-// Workflow Fields Component
-const WorkflowFields = ({ workflowId }) => {
+// ============================================
+// FIELDS TAB
+// ============================================
+
+const WorkflowFieldsTab = ({ workflowId }) => {
     const [fields, setFields] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingField, setEditingField] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
+
+    const selectedFieldType = watch('field_type');
 
     useEffect(() => {
         fetchFields();
@@ -165,24 +313,16 @@ const WorkflowFields = ({ workflowId }) => {
         }
     };
 
-    const fieldTypeOptions = [
-        { value: 'text', label: 'Text' },
-        { value: 'number', label: 'Number' },
-        { value: 'dropdown', label: 'Dropdown' },
-        { value: 'date', label: 'Date' },
-        { value: 'email', label: 'Email' },
-    ];
-
     const columns = [
         {
             accessorKey: 'label',
-            header: 'Label',
+            header: 'Field Label',
         },
         {
             accessorKey: 'name',
             header: 'Field Name',
             cell: ({ row }) => (
-                <code className="text-sm bg-gray-100 dark:bg-dark-border px-2 py-1 rounded">
+                <code className="text-sm bg-gray-100 dark:bg-dark-border px-2 py-1 rounded font-mono">
                     {row.original.name}
                 </code>
             ),
@@ -198,7 +338,7 @@ const WorkflowFields = ({ workflowId }) => {
             accessorKey: 'required',
             header: 'Required',
             cell: ({ row }) => (
-                <Badge variant={row.original.required ? 'danger' : 'default'}>
+                <Badge variant={row.original.required ? 'danger' : 'success'}>
                     {row.original.required ? 'Yes' : 'No'}
                 </Badge>
             ),
@@ -229,7 +369,10 @@ const WorkflowFields = ({ workflowId }) => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-600 dark:text-dark-muted">
+                    Define dynamic input fields for this workflow.
+                </p>
                 <Button onClick={() => handleOpenModal()}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add Field
@@ -256,6 +399,7 @@ const WorkflowFields = ({ workflowId }) => {
                 )}
             </Card>
 
+            {/* Add/Edit Field Modal */}
             <Modal
                 isOpen={showModal}
                 onClose={handleCloseModal}
@@ -264,7 +408,7 @@ const WorkflowFields = ({ workflowId }) => {
             >
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                     <Input
-                        label="Label"
+                        label="Field Label"
                         placeholder="e.g., Amount"
                         {...register('label', { required: 'Label is required' })}
                         error={errors.label?.message}
@@ -278,25 +422,34 @@ const WorkflowFields = ({ workflowId }) => {
                         helperText="Use lowercase with underscores (e.g., first_name)"
                     />
 
-                    <Select
-                        label="Field Type"
-                        options={fieldTypeOptions}
-                        {...register('field_type', { required: 'Field type is required' })}
+                    <Controller
+                        name="field_type"
+                        control={register('field_type').control}
+                        render={({ field }) => (
+                            <Select
+                                label="Field Type"
+                                options={FIELD_TYPES}
+                                value={field.value}
+                                onChange={field.onChange}
+                            />
+                        )}
                     />
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
-                            Options (one per line)
-                        </label>
-                        <textarea
-                            {...register('options')}
-                            placeholder="High&#10;Medium&#10;Low"
-                            rows={3}
-                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-dark-card dark:border-dark-border"
-                            disabled={false}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Required for dropdown type</p>
-                    </div>
+                    {/* Show options textarea only for dropdown type */}
+                    {selectedFieldType === 'dropdown' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
+                                Options (one per line)
+                            </label>
+                            <textarea
+                                {...register('options')}
+                                placeholder="High&#10;Medium&#10;Low"
+                                rows={4}
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-dark-card dark:border-dark-border"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Required for dropdown type</p>
+                        </div>
+                    )}
 
                     <div className="flex items-center gap-2">
                         <input
@@ -321,6 +474,7 @@ const WorkflowFields = ({ workflowId }) => {
                 </form>
             </Modal>
 
+            {/* Delete Confirmation Modal */}
             <Modal
                 isOpen={!!deleteConfirm}
                 onClose={() => setDeleteConfirm(null)}
@@ -343,15 +497,102 @@ const WorkflowFields = ({ workflowId }) => {
     );
 };
 
-// Workflow Steps Component
-const WorkflowSteps = ({ workflowId }) => {
+// ============================================
+// STEPS TAB (with Drag & Drop)
+// ============================================
+
+const SortableStepRow = ({ step, onEdit, onDelete }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: step.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 1,
+        opacity: isDragging ? 0.8 : 1,
+    };
+
+    const stepTypeColors = {
+        task: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+        approval: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+        notification: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    };
+
+    return (
+        <tr
+            ref={setNodeRef}
+            style={style}
+            className="hover:bg-gray-50 dark:hover:bg-dark-card transition-colors"
+        >
+            <td className="px-4 py-3">
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-dark-border rounded"
+                >
+                    <GripVertical className="w-5 h-5 text-gray-400" />
+                </div>
+            </td>
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                        <span className="text-sm font-medium text-primary-700 dark:text-primary-400">
+                            {step.order}
+                        </span>
+                    </div>
+                </div>
+            </td>
+            <td className="px-4 py-3 font-medium text-gray-900 dark:text-dark-text">
+                {step.name}
+            </td>
+            <td className="px-4 py-3">
+                <span className={cn('px-2 py-1 rounded-full text-xs font-medium', stepTypeColors[step.step_type])}>
+                    {step.step_type}
+                </span>
+            </td>
+            <td className="px-4 py-3 text-gray-600 dark:text-dark-muted">
+                {step.assigned_to || step.approval_type || '-'}
+            </td>
+            <td className="px-4 py-3 text-gray-600 dark:text-dark-muted text-sm">
+                {step.description || '-'}
+            </td>
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(step)}>
+                        <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onDelete(step)}>
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                </div>
+            </td>
+        </tr>
+    );
+};
+
+const WorkflowStepsTab = ({ workflowId }) => {
     const [steps, setSteps] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingStep, setEditingStep] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
+
+    const selectedStepType = watch('step_type');
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         fetchSteps();
@@ -360,11 +601,40 @@ const WorkflowSteps = ({ workflowId }) => {
     const fetchSteps = async () => {
         try {
             const response = await stepsAPI.list({ workflow: workflowId });
-            setSteps(response.data.results || response.data);
+            const stepsData = response.data.results || response.data;
+            // Sort by order
+            const sorted = [...stepsData].sort((a, b) => a.order - b.order);
+            setSteps(sorted);
         } catch (error) {
             console.error('Error fetching steps:', error);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleDragEnd = async (event) => {
+        const { active, over } = event;
+
+        if (active.id !== over?.id) {
+            const oldIndex = steps.findIndex((s) => s.id === active.id);
+            const newIndex = steps.findIndex((s) => s.id === over.id);
+
+            const newSteps = arrayMove(steps, oldIndex, newIndex).map((step, index) => ({
+                ...step,
+                order: index + 1,
+            }));
+
+            setSteps(newSteps);
+
+            // Persist the new order
+            try {
+                await stepsAPI.reorder(workflowId, {
+                    steps: newSteps.map(s => ({ id: s.id, order: s.order })),
+                });
+            } catch (error) {
+                console.error('Error reordering steps:', error);
+                fetchSteps(); // Revert on error
+            }
         }
     };
 
@@ -373,10 +643,10 @@ const WorkflowSteps = ({ workflowId }) => {
         if (step) {
             setValue('name', step.name);
             setValue('step_type', step.step_type);
-            setValue('execution_order', step.execution_order);
+            setValue('approval_type', step.approval_type || 'general');
             setValue('description', step.description);
         } else {
-            reset({ name: '', step_type: 'task', execution_order: steps.length + 1, description: '' });
+            reset({ name: '', step_type: 'task', approval_type: 'general', description: '' });
         }
         setShowModal(true);
     };
@@ -392,7 +662,7 @@ const WorkflowSteps = ({ workflowId }) => {
             const payload = {
                 ...data,
                 workflow: workflowId,
-                execution_order: parseInt(data.execution_order),
+                order: editingStep ? editingStep.order : steps.length + 1,
             };
 
             if (editingStep) {
@@ -418,100 +688,79 @@ const WorkflowSteps = ({ workflowId }) => {
         }
     };
 
-    const stepTypeOptions = [
-        { value: 'task', label: 'Task' },
-        { value: 'approval', label: 'Approval' },
-        { value: 'notification', label: 'Notification' },
-    ];
-
-    const columns = [
-        {
-            accessorKey: 'execution_order',
-            header: 'Order',
-            cell: ({ row }) => (
-                <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                    <span className="text-sm font-medium text-primary-700 dark:text-primary-400">
-                        {row.original.execution_order}
-                    </span>
-                </div>
-            ),
-        },
-        {
-            accessorKey: 'name',
-            header: 'Step Name',
-        },
-        {
-            accessorKey: 'step_type',
-            header: 'Type',
-            cell: ({ row }) => (
-                <Badge
-                    variant={
-                        row.original.step_type === 'approval' ? 'warning' :
-                            row.original.step_type === 'notification' ? 'info' : 'default'
-                    }
-                >
-                    {row.original.step_type}
-                </Badge>
-            ),
-        },
-        {
-            accessorKey: 'description',
-            header: 'Description',
-            cell: ({ row }) => row.original.description || '-',
-        },
-        {
-            id: 'actions',
-            header: 'Actions',
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleOpenModal(row.original)}
-                    >
-                        <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteConfirm(row.original)}
-                    >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                </div>
-            ),
-        },
-    ];
-
     return (
         <div className="space-y-6">
-            <div className="flex justify-end">
-                <Button onClick={() => handleOpenModal()}>
+            <div className="flex justify-between items-center">
+                <div>
+                    <p className="text-sm text-gray-600 dark:text-dark-muted">
+                        Define workflow stages. Drag and drop to reorder steps.
+                    </p>
+                    {steps.length > 0 && (
+                        <div className="flex items-center gap-2 mt-2 text-xs text-amber-600 dark:text-amber-400">
+                            <AlertCircle className="w-4 h-4" />
+                            <span>Drag the handle icon to reorder steps</span>
+                        </div>
+                    )}
+                </div>
+                <Button onClick={() => handleOpenModal()} disabled={steps.length === 0}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add Step
                 </Button>
             </div>
 
-            <Card className="p-0">
-                {steps.length === 0 && !isLoading ? (
+            {steps.length === 0 ? (
+                <Card>
                     <EmptyState
-                        icon={ListOrdered}
+                        icon={GripVertical}
                         title="No steps yet"
-                        description="Add steps to define the workflow process."
+                        description="Add your first step to start building the workflow."
                         action
                         onAction={() => handleOpenModal()}
                         actionLabel="Add Step"
                     />
-                ) : (
-                    <DataTable
-                        columns={columns}
-                        data={steps}
-                        isLoading={isLoading}
-                        showSearch={false}
-                    />
-                )}
-            </Card>
+                </Card>
+            ) : (
+                <Card className="p-0 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 dark:bg-dark-card border-b border-gray-200 dark:border-dark-border">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider w-12"></th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider w-16">Order</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Step Name</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Type</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Role/Approval</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Description</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider w-24">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-dark-border">
+                                <DndContext
+                                    sensors={sensors}
+                                    collisionDetection={closestCenter}
+                                    onDragEnd={handleDragEnd}
+                                >
+                                    <SortableContext
+                                        items={steps.map(s => s.id)}
+                                        strategy={verticalListSortingStrategy}
+                                    >
+                                        {steps.map((step) => (
+                                            <SortableStepRow
+                                                key={step.id}
+                                                step={step}
+                                                onEdit={handleOpenModal}
+                                                onDelete={setDeleteConfirm}
+                                            />
+                                        ))}
+                                    </SortableContext>
+                                </DndContext>
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
 
+            {/* Add/Edit Step Modal */}
             <Modal
                 isOpen={showModal}
                 onClose={handleCloseModal}
@@ -521,23 +770,40 @@ const WorkflowSteps = ({ workflowId }) => {
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                     <Input
                         label="Step Name"
-                        placeholder="e.g., Review Request"
+                        placeholder="e.g., Manager Approval"
                         {...register('name', { required: 'Step name is required' })}
                         error={errors.name?.message}
                     />
 
-                    <Select
-                        label="Step Type"
-                        options={stepTypeOptions}
-                        {...register('step_type', { required: 'Step type is required' })}
+                    <Controller
+                        name="step_type"
+                        control={register('step_type').control}
+                        render={({ field }) => (
+                            <Select
+                                label="Step Type"
+                                options={STEP_TYPES}
+                                value={field.value}
+                                onChange={field.onChange}
+                            />
+                        )}
                     />
 
-                    <Input
-                        label="Execution Order"
-                        type="number"
-                        {...register('execution_order', { required: 'Order is required', valueAsNumber: true })}
-                        error={errors.execution_order?.message}
-                    />
+                    {/* Show approval type only for approval steps */}
+                    {selectedStepType === 'approval' && (
+                        <Controller
+                            name="approval_type"
+                            control={register('approval_type').control}
+                            render={({ field }) => (
+                                <Select
+                                    label="Approval Type"
+                                    options={APPROVAL_TYPES}
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    helperText="Determines which role can approve this step"
+                                />
+                            )}
+                        />
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
@@ -562,6 +828,7 @@ const WorkflowSteps = ({ workflowId }) => {
                 </form>
             </Modal>
 
+            {/* Delete Confirmation Modal */}
             <Modal
                 isOpen={!!deleteConfirm}
                 onClose={() => setDeleteConfirm(null)}
@@ -570,6 +837,7 @@ const WorkflowSteps = ({ workflowId }) => {
             >
                 <p className="text-gray-600 dark:text-dark-muted mb-6">
                     Are you sure you want to delete step <strong>{deleteConfirm?.name}</strong>?
+                    This will also delete all rules associated with this step.
                 </p>
                 <Modal.Footer>
                     <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>
@@ -584,41 +852,190 @@ const WorkflowSteps = ({ workflowId }) => {
     );
 };
 
-// Workflow Rules Component
-const WorkflowRules = ({ workflowId }) => {
+// ============================================
+// RULES TAB (with Rule Builder UI)
+// ============================================
+
+const ConditionBuilder = ({ condition, index, fields, onChange, onRemove }) => {
+    const fieldOptions = useMemo(() =>
+        fields.map(f => ({ value: f.name, label: f.label, type: f.field_type })),
+        [fields]
+    );
+
+    const selectedField = fields.find(f => f.name === condition.field);
+    const operators = selectedField ? (OPERATORS_BY_TYPE[selectedField.field_type] || OPERATORS_BY_TYPE.text) : OPERATORS_BY_TYPE.text;
+
+    // Get value options for dropdown fields
+    const valueOptions = selectedField?.field_type === 'dropdown'
+        ? (selectedField.options || []).map(o => ({ value: o, label: o }))
+        : [];
+
+    return (
+        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-dark-card rounded-lg">
+            {index > 0 && (
+                <select
+                    value={condition.logic || 'AND'}
+                    onChange={(e) => onChange(index, { ...condition, logic: e.target.value })}
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                >
+                    <option value="AND">AND</option>
+                    <option value="OR">OR</option>
+                </select>
+            )}
+            {index === 0 && <span className="w-8 text-sm font-medium text-gray-600">IF</span>}
+
+            <select
+                value={condition.field || ''}
+                onChange={(e) => onChange(index, { ...condition, field: e.target.value, operator: '', value: '' })}
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+            >
+                <option value="">Select field</option>
+                {fieldOptions.map((field) => (
+                    <option key={field.value} value={field.value}>
+                        {field.label} ({field.type})
+                    </option>
+                ))}
+            </select>
+
+            <select
+                value={condition.operator || ''}
+                onChange={(e) => onChange(index, { ...condition, operator: e.target.value })}
+                className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                disabled={!condition.field}
+            >
+                <option value="">Operator</option>
+                {operators.map((op) => (
+                    <option key={op.value} value={op.value}>
+                        {op.label}
+                    </option>
+                ))}
+            </select>
+
+            {/* Value input - type depends on field type */}
+            {condition.field && selectedField?.field_type === 'dropdown' ? (
+                <select
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                >
+                    <option value="">Select value</option>
+                    {valueOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+            ) : condition.field && selectedField?.field_type === 'boolean' ? (
+                <select
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                >
+                    <option value="">Select</option>
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                </select>
+            ) : condition.field ? (
+                <input
+                    type={selectedField?.field_type === 'number' ? 'number' : 'text'}
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    placeholder="Value"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                    disabled={!condition.operator}
+                />
+            ) : (
+                <div className="flex-1 px-3 py-2 text-sm text-gray-400 bg-gray-100 dark:bg-dark-border rounded">
+                    Select a field first
+                </div>
+            )}
+
+            <Button variant="ghost" size="icon" onClick={() => onRemove(index)}>
+                <X className="w-4 h-4 text-red-500" />
+            </Button>
+        </div>
+    );
+};
+
+const WorkflowRulesTab = ({ workflowId }) => {
+    const [steps, setSteps] = useState([]);
+    const [fields, setFields] = useState([]);
     const [rules, setRules] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [selectedStepId, setSelectedStepId] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingRule, setEditingRule] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm();
 
     useEffect(() => {
-        fetchRules();
+        fetchData();
     }, [workflowId]);
 
-    const fetchRules = async () => {
+    const fetchData = async () => {
         try {
-            const response = await rulesAPI.list({ workflow: workflowId });
-            setRules(response.data.results || response.data);
+            const [stepsRes, fieldsRes] = await Promise.all([
+                stepsAPI.list({ workflow: workflowId }),
+                workflowFieldsAPI.list(workflowId),
+            ]);
+
+            const stepsData = stepsRes.data.results || stepsRes.data;
+            const fieldsData = fieldsRes.data.results || fieldsRes.data;
+
+            setSteps(stepsData.sort((a, b) => a.order - b.order));
+            setFields(fieldsData);
+
+            // Auto-select first step if available
+            if (stepsData.length > 0) {
+                setSelectedStepId(stepsData[0].id);
+            }
         } catch (error) {
-            console.error('Error fetching rules:', error);
+            console.error('Error fetching data:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
+    useEffect(() => {
+        if (selectedStepId) {
+            fetchRules(selectedStepId);
+        }
+    }, [selectedStepId]);
+
+    const fetchRules = async (stepId) => {
+        try {
+            const response = await rulesAPI.list({ step: stepId });
+            setRules(response.data.results || response.data);
+        } catch (error) {
+            console.error('Error fetching rules:', error);
+        }
+    };
+
     const handleOpenModal = (rule = null) => {
         setEditingRule(rule);
+
         if (rule) {
+            // Parse existing condition
+            let parsedConditions = [];
+            try {
+                const cond = typeof rule.condition === 'string' ? JSON.parse(rule.condition) : rule.condition;
+                parsedConditions = Array.isArray(cond) ? cond : [cond];
+            } catch (e) {
+                parsedConditions = [{ field: '', operator: '', value: '', logic: 'AND' }];
+            }
+
+            setValue('conditions', parsedConditions);
             setValue('name', rule.name);
-            setValue('condition', rule.condition);
-            setValue('priority', rule.priority);
-            setValue('next_step', rule.next_step);
+            setValue('next_step', rule.next_step?.id || '');
             setValue('is_default', rule.is_default);
         } else {
-            reset({ name: '', condition: '', priority: 1, next_step: '', is_default: false });
+            reset({
+                name: '',
+                conditions: [{ field: '', operator: '', value: '', logic: 'AND' }],
+                next_step: '',
+                is_default: false
+            });
         }
         setShowModal(true);
     };
@@ -631,10 +1048,16 @@ const WorkflowRules = ({ workflowId }) => {
 
     const onSubmit = async (data) => {
         try {
+            // Filter out empty conditions
+            const validConditions = data.conditions.filter(c => c.field && c.operator);
+
             const payload = {
-                ...data,
-                workflow: workflowId,
-                priority: parseInt(data.priority),
+                name: data.name,
+                condition: JSON.stringify(validConditions),
+                step: selectedStepId,
+                next_step: data.next_step || null,
+                is_default: data.is_default,
+                priority: editingRule?.priority || (rules.length + 1),
             };
 
             if (editingRule) {
@@ -642,7 +1065,7 @@ const WorkflowRules = ({ workflowId }) => {
             } else {
                 await rulesAPI.create(payload);
             }
-            fetchRules();
+            fetchRules(selectedStepId);
             handleCloseModal();
         } catch (error) {
             console.error('Error saving rule:', error);
@@ -653,40 +1076,69 @@ const WorkflowRules = ({ workflowId }) => {
         if (!deleteConfirm) return;
         try {
             await rulesAPI.delete(deleteConfirm.id);
-            fetchRules();
+            fetchRules(selectedStepId);
             setDeleteConfirm(null);
         } catch (error) {
             console.error('Error deleting rule:', error);
         }
     };
 
+    // Get available next steps (all steps except current)
+    const availableNextSteps = useMemo(() => {
+        return steps.filter(s => s.id !== selectedStepId);
+    }, [steps, selectedStepId]);
+
+    // Get default rule
+    const defaultRule = rules.find(r => r.is_default);
+
     const columns = [
+        {
+            accessorKey: 'priority',
+            header: 'Priority',
+            cell: ({ row }) => (
+                <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-dark-border flex items-center justify-center">
+                    <span className="text-sm font-medium text-gray-700 dark:text-dark-text">
+                        {row.original.priority}
+                    </span>
+                </div>
+            ),
+        },
         {
             accessorKey: 'name',
             header: 'Rule Name',
         },
         {
             accessorKey: 'condition',
-            header: 'Condition',
-            cell: ({ row }) => (
-                <code className="text-sm bg-gray-100 dark:bg-dark-border px-2 py-1 rounded">
-                    {row.original.condition}
-                </code>
-            ),
-        },
-        {
-            accessorKey: 'priority',
-            header: 'Priority',
-            cell: ({ row }) => (
-                <span className="text-gray-900 dark:text-dark-text">
-                    {row.original.priority}
-                </span>
-            ),
+            header: 'Conditions',
+            cell: ({ row }) => {
+                try {
+                    const cond = typeof row.original.condition === 'string'
+                        ? JSON.parse(row.original.condition)
+                        : row.original.condition;
+                    const conditionText = Array.isArray(cond)
+                        ? cond.map(c => `${c.field} ${c.operator} ${c.value}`).join(` ${cond[0]?.logic || 'AND'} `)
+                        : 'No conditions';
+                    return (
+                        <code className="text-xs bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block max-w-[200px] truncate">
+                            {conditionText}
+                        </code>
+                    );
+                } catch (e) {
+                    return <span className="text-gray-400">-</span>;
+                }
+            },
         },
         {
             accessorKey: 'next_step',
             header: 'Next Step',
-            cell: ({ row }) => row.original.next_step || '-',
+            cell: ({ row }) => {
+                const nextStep = steps.find(s => s.id === row.original.next_step);
+                return nextStep ? (
+                    <Badge variant="info">{nextStep.name}</Badge>
+                ) : (
+                    <span className="text-gray-400">-</span>
+                );
+            },
         },
         {
             accessorKey: 'is_default',
@@ -702,18 +1154,10 @@ const WorkflowRules = ({ workflowId }) => {
             header: 'Actions',
             cell: ({ row }) => (
                 <div className="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleOpenModal(row.original)}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(row.original)}>
                         <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteConfirm(row.original)}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row.original)}>
                         <Trash2 className="w-4 h-4 text-red-500" />
                     </Button>
                 </div>
@@ -721,21 +1165,72 @@ const WorkflowRules = ({ workflowId }) => {
         },
     ];
 
+    if (steps.length === 0) {
+        return (
+            <div className="space-y-6">
+                <Card>
+                    <EmptyState
+                        icon={BookOpen}
+                        title="No steps available"
+                        description="You need to add steps before creating rules."
+                    />
+                </Card>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
+            {/* Step Selector */}
+            <div className="flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-700 dark:text-dark-text">
+                    Rules for Step:
+                </label>
+                <select
+                    value={selectedStepId}
+                    onChange={(e) => setSelectedStepId(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card min-w-[200px]"
+                >
+                    {steps.map((step) => (
+                        <option key={step.id} value={step.id}>
+                            {step.name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Validation Messages */}
+            {selectedStepId && (
+                <div className="space-y-2">
+                    {!defaultRule && rules.length > 0 && (
+                        <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-400">
+                            <AlertCircle className="w-4 h-4" />
+                            <span>Warning: No default rule set. Add a default rule to handle cases where no conditions match.</span>
+                        </div>
+                    )}
+                    {defaultRule && (
+                        <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-400">
+                            <CheckCircle className="w-4 h-4" />
+                            <span>Default rule is set: {defaultRule.name}</span>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Rules Table */}
             <div className="flex justify-end">
-                <Button onClick={() => handleOpenModal()}>
+                <Button onClick={() => handleOpenModal()} disabled={!selectedStepId}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add Rule
                 </Button>
             </div>
 
             <Card className="p-0">
-                {rules.length === 0 && !isLoading ? (
+                {rules.length === 0 ? (
                     <EmptyState
                         icon={BookOpen}
                         title="No rules yet"
-                        description="Add rules to define workflow transitions."
+                        description="Add rules to define how the workflow transitions from this step."
                         action
                         onAction={() => handleOpenModal()}
                         actionLabel="Add Rule"
@@ -750,48 +1245,48 @@ const WorkflowRules = ({ workflowId }) => {
                 )}
             </Card>
 
+            {/* Add/Edit Rule Modal with Rule Builder */}
             <Modal
                 isOpen={showModal}
                 onClose={handleCloseModal}
                 title={editingRule ? 'Edit Rule' : 'Add Rule'}
-                size="md"
+                size="lg"
             >
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                     <Input
                         label="Rule Name"
-                        placeholder="e.g., High Amount Rule"
+                        placeholder="e.g., High Amount Approval"
                         {...register('name', { required: 'Rule name is required' })}
                         error={errors.name?.message}
                     />
 
+                    {/* Condition Builder */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
-                            Condition Expression
+                        <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-2">
+                            Conditions
                         </label>
-                        <textarea
-                            {...register('condition', { required: 'Condition is required' })}
-                            placeholder="e.g., amount > 1000 AND department == 'Finance'"
-                            rows={2}
-                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-dark-card dark:border-dark-border"
-                            error={errors.condition?.message}
+                        <ConditionBuilderWrapper
+                            control={control}
+                            fields={fields}
+                            name="conditions"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Use field names from workflow fields (e.g., amount, country, priority)
-                        </p>
                     </div>
 
-                    <Input
-                        label="Priority"
-                        type="number"
-                        {...register('priority', { required: 'Priority is required', valueAsNumber: true })}
-                        error={errors.priority?.message}
-                    />
-
-                    <Input
-                        label="Next Step"
-                        placeholder="e.g., approval_step"
-                        {...register('next_step', { required: 'Next step is required' })}
-                        error={errors.next_step?.message}
+                    <Controller
+                        name="next_step"
+                        control={control}
+                        render={({ field }) => (
+                            <Select
+                                label="Next Step"
+                                options={[
+                                    { value: '', label: 'End Workflow' },
+                                    ...availableNextSteps.map(s => ({ value: s.id, label: s.name }))
+                                ]}
+                                value={field.value}
+                                onChange={field.onChange}
+                                helperText="Where to move next when this rule matches"
+                            />
+                        )}
                     />
 
                     <div className="flex items-center gap-2">
@@ -817,6 +1312,7 @@ const WorkflowRules = ({ workflowId }) => {
                 </form>
             </Modal>
 
+            {/* Delete Confirmation Modal */}
             <Modal
                 isOpen={!!deleteConfirm}
                 onClose={() => setDeleteConfirm(null)}
@@ -835,6 +1331,205 @@ const WorkflowRules = ({ workflowId }) => {
                     </Button>
                 </Modal.Footer>
             </Modal>
+        </div>
+    );
+};
+
+// Wrapper for condition builder with react-hook-form
+const ConditionBuilderWrapper = ({ control, fields, name }) => {
+    return (
+        <Controller
+            name={name}
+            control={control}
+            defaultValue={[{ field: '', operator: '', value: '', logic: 'AND' }]}
+            render={({ field: { value, onChange } }) => {
+                const conditions = value || [{ field: '', operator: '', value: '', logic: 'AND' }];
+
+                const addCondition = () => {
+                    onChange([...conditions, { field: '', operator: '', value: '', logic: 'AND' }]);
+                };
+
+                const updateCondition = (index, updated) => {
+                    const newConditions = [...conditions];
+                    newConditions[index] = updated;
+                    onChange(newConditions);
+                };
+
+                const removeCondition = (index) => {
+                    if (conditions.length > 1) {
+                        onChange(conditions.filter((_, i) => i !== index));
+                    }
+                };
+
+                return (
+                    <div className="space-y-2">
+                        {conditions.map((condition, index) => (
+                            <ConditionBuilder
+                                key={index}
+                                condition={condition}
+                                index={index}
+                                fields={fields}
+                                onChange={updateCondition}
+                                onRemove={removeCondition}
+                            />
+                        ))}
+                        <Button type="button" variant="secondary" size="sm" onClick={addCondition}>
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Condition
+                        </Button>
+                    </div>
+                );
+            }}
+        />
+    );
+};
+
+// ============================================
+// VISUAL BUILDER TAB (React Flow)
+// ============================================
+
+const VisualBuilderTab = ({ workflowId }) => {
+    const [steps, setSteps] = useState([]);
+    const [rules, setRules] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 10 },
+        })
+    );
+
+    useEffect(() => {
+        fetchData();
+    }, [workflowId]);
+
+    const fetchData = async () => {
+        try {
+            const [stepsRes, rulesRes] = await Promise.all([
+                stepsAPI.list({ workflow: workflowId }),
+                rulesAPI.list({ workflow: workflowId }),
+            ]);
+
+            const stepsData = stepsRes.data.results || stepsRes.data;
+            const rulesData = rulesRes.data.results || rulesRes.data;
+
+            setSteps(stepsData.sort((a, b) => a.order - b.order));
+            setRules(rulesData);
+
+            // Build nodes and edges
+            buildGraph(stepsData, rulesData);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const buildGraph = (stepsData, rulesData) => {
+        // Create nodes
+        const newNodes = stepsData.map((step, index) => ({
+            id: step.id,
+            type: 'stepNode',
+            position: { x: 250, y: index * 150 + 50 },
+            data: {
+                label: step.name,
+                stepType: step.step_type,
+                approvalType: step.approval_type,
+            },
+        }));
+
+        // Create edges from rules
+        const newEdges = [];
+        rulesData.forEach((rule) => {
+            if (rule.next_step) {
+                newEdges.push({
+                    id: `e-${rule.id}`,
+                    source: rule.step,
+                    target: rule.next_step,
+                    label: rule.is_default ? 'default' : rule.name,
+                    type: 'smoothstep',
+                    animated: rule.is_default,
+                    style: rule.is_default ? { stroke: '#10b981' } : { stroke: '#6b7280' },
+                    markerEnd: {
+                        type: MarkerType.ArrowClosed,
+                    },
+                });
+            }
+        });
+
+        setNodes(newNodes);
+        setEdges(newEdges);
+    };
+
+    const onConnect = useCallback((params) => {
+        setEdges((eds) => addEdge({
+            ...params,
+            type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed },
+        }, eds));
+    }, [setEdges]);
+
+    if (steps.length === 0) {
+        return (
+            <div className="space-y-6">
+                <Card>
+                    <EmptyState
+                        icon={GitBranch}
+                        title="No workflow to visualize"
+                        description="Add steps and rules first, then come back to the visual builder."
+                    />
+                </Card>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600 dark:text-dark-muted">
+                    Visual representation of your workflow. Steps are nodes, rules are edges.
+                </p>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        <span className="text-xs text-gray-600 dark:text-dark-muted">Task</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <span className="text-xs text-gray-600 dark:text-dark-muted">Approval</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                        <span className="text-xs text-gray-600 dark:text-dark-muted">Notification</span>
+                    </div>
+                </div>
+            </div>
+
+            <Card className="h-[600px] overflow-hidden">
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    nodeTypes={nodeTypes}
+                    sensors={sensors}
+                    fitView
+                    attributionPosition="bottom-left"
+                >
+                    <Background />
+                    <Controls />
+                    <MiniMap />
+                </ReactFlow>
+            </Card>
+
+            <div className="text-sm text-gray-500 dark:text-dark-muted">
+                <p>• Drag nodes to reposition them</p>
+                <p>• Connect nodes by dragging from one handle to another</p>
+                <p>• Click on edges to edit or delete connections</p>
+            </div>
         </div>
     );
 };

@@ -81,6 +81,7 @@ export const stepsAPI = {
     create: (data) => api.post('/steps/steps/', data),
     update: (id, data) => api.patch(`/steps/steps/${id}/`, data),
     delete: (id) => api.delete(`/steps/steps/${id}/`),
+    reorder: (workflowId, data) => api.post(`/steps/steps/reorder/`, { workflow: workflowId, steps: data.steps }),
 };
 
 // Rules API

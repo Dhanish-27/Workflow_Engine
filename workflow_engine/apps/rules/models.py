@@ -6,6 +6,8 @@ class Rule(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    name = models.CharField(max_length=255, blank=True, default="")
+
     step = models.ForeignKey(
         "steps.Step",
         on_delete=models.CASCADE,
@@ -22,7 +24,9 @@ class Rule(models.Model):
         related_name="next_rules"
     )
 
-    priority = models.IntegerField()
+    priority = models.IntegerField(default=1)
+
+    is_default = models.BooleanField(default=False, help_text="Use this rule when no other rules match")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -32,4 +36,4 @@ class Rule(models.Model):
         ordering = ["priority"]
 
     def __str__(self):
-        return self.condition
+        return self.name or self.condition[:50]
