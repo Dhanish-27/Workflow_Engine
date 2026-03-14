@@ -16,6 +16,8 @@ import {
     CheckCircle,
     ChevronDown,
     ChevronRight,
+    ArrowUp,
+    ArrowDown,
 } from 'lucide-react';
 import ReactFlow, {
     Background,
@@ -83,19 +85,22 @@ const ROLES = [
     { value: 'hr', label: 'HR' },
 ];
 
+// Enhanced OPERATORS_BY_TYPE with all required operators
 const OPERATORS_BY_TYPE = {
     text: [
         { value: 'equals', label: 'equals' },
         { value: 'not_equals', label: 'not equals' },
         { value: 'contains', label: 'contains' },
+        { value: 'starts_with', label: 'starts with' },
+        { value: 'ends_with', label: 'ends with' },
     ],
     number: [
-        { value: 'eq', label: '==' },
-        { value: 'neq', label: '!=' },
-        { value: 'gt', label: '>' },
-        { value: 'gte', label: '>=' },
-        { value: 'lt', label: '<' },
-        { value: 'lte', label: '<=' },
+        { value: 'eq', label: 'equals (==)' },
+        { value: 'neq', label: 'not equals (!=)' },
+        { value: 'gt', label: 'greater than (>)' },
+        { value: 'gte', label: 'greater or equal (>=)' },
+        { value: 'lt', label: 'less than (<)' },
+        { value: 'lte', label: 'less or equal (<=)' },
     ],
     dropdown: [
         { value: 'equals', label: 'equals' },
@@ -110,6 +115,18 @@ const OPERATORS_BY_TYPE = {
         { value: 'is_true', label: 'is true' },
         { value: 'is_false', label: 'is false' },
     ],
+};
+
+// Format field type for display
+const formatFieldType = (type) => {
+    const labels = {
+        text: 'Text',
+        number: 'Number',
+        dropdown: 'Dropdown',
+        date: 'Date',
+        boolean: 'Yes/No',
+    };
+    return labels[type] || type;
 };
 
 // Custom Node for React Flow
@@ -253,7 +270,7 @@ const WorkflowFieldsTab = ({ workflowId }) => {
 
     const fetchFields = async () => {
         try {
-            const response = await workflowFieldsAPI.list(workflowId);
+            const response = await workflowFieldsAPI.list({ workflow: workflowId });
             setFields(response.data.results || response.data);
         } catch (error) {
             console.error('Error fetching fields:', error);
@@ -856,15 +873,11 @@ const WorkflowStepsTab = ({ workflowId }) => {
 };
 
 // ============================================
-// RULES TAB (with Rule Builder UI)
+// ENHANCED RULE BUILDER COMPONENTS
 // ============================================
 
-const ConditionBuilder = ({ condition, index, fields, onChange, onRemove }) => {
-    const fieldOptions = useMemo(() =>
-        fields.map(f => ({ value: f.name, label: f.label, type: f.field_type })),
-        [fields]
-    );
-
+// Enhanced Condition Builder with better UI
+const ConditionRow = ({ condition, index, fields, onChange, onRemove, canRemove, showLogic }) => {
     const selectedField = fields.find(f => f.name === condition.field);
     const operators = selectedField ? (OPERATORS_BY_TYPE[selectedField.field_type] || OPERATORS_BY_TYPE.text) : OPERATORS_BY_TYPE.text;
 
@@ -873,37 +886,130 @@ const ConditionBuilder = ({ condition, index, fields, onChange, onRemove }) => {
         ? (selectedField.options || []).map(o => ({ value: o, label: o }))
         : [];
 
+    const renderValueInput = () => {
+        if (!condition.field) {
+            return (
+                <div className="flex-1 px-3 py-2 text-sm text-gray-400 bg-gray-100 dark:bg-dark-border rounded border border-dashed border-gray-300">
+                    Select a field first
+                </div>
+            );
+        }
+
+        if (!condition.operator) {
+            return (
+                <div className="flex-1 px-3 py-2 text-sm text-gray-400 bg-gray-100 dark:bg-dark-border rounded border border-dashed border-gray-300">
+                    Select an operator
+                </div>
+            );
+        }
+
+        // Dropdown field
+        if (selectedField?.field_type === 'dropdown') {
+            return (
+                <select
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                >
+                    <option value="">Select value</option>
+                    {valueOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+            );
+        }
+
+        // Boolean field
+        if (selectedField?.field_type === 'boolean') {
+            return (
+                <select
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                >
+                    <option value="">Select</option>
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                </select>
+            );
+        }
+
+        // Date field
+        if (selectedField?.field_type === 'date') {
+            return (
+                <input
+                    type="date"
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+            );
+        }
+
+        // Number field
+        if (selectedField?.field_type === 'number') {
+            return (
+                <input
+                    type="number"
+                    value={condition.value || ''}
+                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                    placeholder="Enter value"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+            );
+        }
+
+        // Text field
+        return (
+            <input
+                type="text"
+                value={condition.value || ''}
+                onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
+                placeholder="Enter value"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            />
+        );
+    };
+
     return (
-        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-dark-card rounded-lg">
-            {index > 0 && (
+        <div className={cn(
+            "flex items-center gap-2 p-3 bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border",
+            !condition.field && "border-dashed"
+        )}>
+            {/* Logic selector (AND/OR) */}
+            {showLogic && (
                 <select
                     value={condition.logic || 'AND'}
                     onChange={(e) => onChange(index, { ...condition, logic: e.target.value })}
-                    className="w-20 px-2 py-1 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                    className="w-16 px-2 py-1.5 text-sm font-medium border border-gray-300 dark:border-dark-border rounded bg-gray-50 dark:bg-dark-border text-gray-700 dark:text-dark-text"
                 >
                     <option value="AND">AND</option>
                     <option value="OR">OR</option>
                 </select>
             )}
-            {index === 0 && <span className="w-8 text-sm font-medium text-gray-600">IF</span>}
+            {!showLogic && <span className="w-16 text-sm font-medium text-gray-600 dark:text-dark-muted">IF</span>}
 
+            {/* Field selector */}
             <select
                 value={condition.field || ''}
                 onChange={(e) => onChange(index, { ...condition, field: e.target.value, operator: '', value: '' })}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                className="flex-1 min-w-[140px] px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             >
                 <option value="">Select field</option>
-                {fieldOptions.map((field) => (
-                    <option key={field.value} value={field.value}>
-                        {field.label} ({field.type})
+                {fields.map((field) => (
+                    <option key={field.id || field.name} value={field.name}>
+                        {field.label} ({formatFieldType(field.field_type)})
                     </option>
                 ))}
             </select>
 
+            {/* Operator selector */}
             <select
                 value={condition.operator || ''}
                 onChange={(e) => onChange(index, { ...condition, operator: e.target.value })}
-                className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
+                className="w-40 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded-lg bg-white dark:bg-dark-card focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-50"
                 disabled={!condition.field}
             >
                 <option value="">Operator</option>
@@ -914,51 +1020,50 @@ const ConditionBuilder = ({ condition, index, fields, onChange, onRemove }) => {
                 ))}
             </select>
 
-            {/* Value input - type depends on field type */}
-            {condition.field && selectedField?.field_type === 'dropdown' ? (
-                <select
-                    value={condition.value || ''}
-                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
-                >
-                    <option value="">Select value</option>
-                    {valueOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                        </option>
-                    ))}
-                </select>
-            ) : condition.field && selectedField?.field_type === 'boolean' ? (
-                <select
-                    value={condition.value || ''}
-                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
-                >
-                    <option value="">Select</option>
-                    <option value="true">True</option>
-                    <option value="false">False</option>
-                </select>
-            ) : condition.field ? (
-                <input
-                    type={selectedField?.field_type === 'number' ? 'number' : 'text'}
-                    value={condition.value || ''}
-                    onChange={(e) => onChange(index, { ...condition, value: e.target.value })}
-                    placeholder="Value"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-border rounded bg-white dark:bg-dark-card"
-                    disabled={!condition.operator}
-                />
-            ) : (
-                <div className="flex-1 px-3 py-2 text-sm text-gray-400 bg-gray-100 dark:bg-dark-border rounded">
-                    Select a field first
-                </div>
-            )}
+            {/* Value input */}
+            {renderValueInput()}
 
-            <Button variant="ghost" size="icon" onClick={() => onRemove(index)}>
-                <X className="w-4 h-4 text-red-500" />
+            {/* Remove button */}
+            <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onRemove(index)}
+                disabled={!canRemove}
+                className="flex-shrink-0"
+            >
+                <X className="w-4 h-4 text-gray-400 hover:text-red-500" />
             </Button>
         </div>
     );
 };
+
+// Format conditions for display
+const formatConditionsDisplay = (conditions, fields) => {
+    if (!conditions || conditions.length === 0) return 'No conditions';
+
+    try {
+        const parsed = typeof conditions === 'string' ? JSON.parse(conditions) : conditions;
+        if (!Array.isArray(parsed)) return String(conditions);
+
+        return parsed.map((cond, idx) => {
+            const field = fields.find(f => f.name === cond.field);
+            const fieldLabel = field?.label || cond.field;
+            const operatorLabel = cond.operator || '';
+            const value = cond.value || '';
+
+            if (idx === 0) {
+                return `${fieldLabel} ${operatorLabel} "${value}"`;
+            }
+            return `${cond.logic || 'AND'} ${fieldLabel} ${operatorLabel} "${value}"`;
+        }).join(' ');
+    } catch (e) {
+        return String(conditions);
+    }
+};
+
+// ============================================
+// RULES TAB (with Enhanced Rule Builder)
+// ============================================
 
 const WorkflowRulesTab = ({ workflowId }) => {
     const [steps, setSteps] = useState([]);
@@ -969,8 +1074,18 @@ const WorkflowRulesTab = ({ workflowId }) => {
     const [showModal, setShowModal] = useState(false);
     const [editingRule, setEditingRule] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [validationErrors, setValidationErrors] = useState([]);
 
-    const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, control, formState: { errors }, watch } = useForm();
+
+    const watchIsDefault = watch('is_default', false);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         fetchData();
@@ -1009,28 +1124,69 @@ const WorkflowRulesTab = ({ workflowId }) => {
     const fetchRules = async (stepId) => {
         try {
             const response = await rulesAPI.list({ step: stepId });
-            setRules(response.data.results || response.data);
+            const rulesData = response.data.results || response.data;
+            // Sort by priority
+            setRules([...rulesData].sort((a, b) => a.priority - b.priority));
         } catch (error) {
             console.error('Error fetching rules:', error);
         }
     };
 
+    const validateRule = (data) => {
+        const errors = [];
+
+        // Check rule name
+        if (!data.name || data.name.trim() === '') {
+            errors.push('Rule name is required');
+        }
+
+        // Check default rule constraints
+        if (data.is_default) {
+            // Default rules should not have conditions
+            const validConditions = data.conditions?.filter(c => c.field && c.operator);
+            if (validConditions && validConditions.length > 0) {
+                errors.push('Default rule cannot have conditions');
+            }
+
+            // Check if there's already a default rule
+            const existingDefault = rules.find(r => r.is_default && r.id !== editingRule?.id);
+            if (existingDefault) {
+                errors.push('Only one default rule is allowed per step');
+            }
+        } else {
+            // Non-default rules must have at least one valid condition
+            const validConditions = data.conditions?.filter(c => c.field && c.operator);
+            if (!validConditions || validConditions.length === 0) {
+                errors.push('At least one condition is required for non-default rules');
+            }
+        }
+
+        // Check next step
+        if (!data.is_default && !data.next_step) {
+            errors.push('Next step is required for non-default rules');
+        }
+
+        setValidationErrors(errors);
+        return errors.length === 0;
+    };
+
     const handleOpenModal = (rule = null) => {
         setEditingRule(rule);
+        setValidationErrors([]);
 
         if (rule) {
             // Parse existing condition
             let parsedConditions = [];
             try {
                 const cond = typeof rule.condition === 'string' ? JSON.parse(rule.condition) : rule.condition;
-                parsedConditions = Array.isArray(cond) ? cond : [cond];
+                parsedConditions = Array.isArray(cond) ? cond : [];
             } catch (e) {
-                parsedConditions = [{ field: '', operator: '', value: '', logic: 'AND' }];
+                parsedConditions = [];
             }
 
-            setValue('conditions', parsedConditions);
+            setValue('conditions', parsedConditions.length > 0 ? parsedConditions : [{ field: '', operator: '', value: '', logic: 'AND' }]);
             setValue('name', rule.name);
-            setValue('next_step', rule.next_step?.id || '');
+            setValue('next_step', rule.next_step?.id || rule.next_step || '');
             setValue('is_default', rule.is_default);
         } else {
             reset({
@@ -1046,19 +1202,30 @@ const WorkflowRulesTab = ({ workflowId }) => {
     const handleCloseModal = () => {
         setShowModal(false);
         setEditingRule(null);
+        setValidationErrors([]);
         reset();
     };
 
     const onSubmit = async (data) => {
+        if (!validateRule(data)) {
+            return;
+        }
+
         try {
             // Filter out empty conditions
-            const validConditions = data.conditions.filter(c => c.field && c.operator);
+            const validConditions = data.is_default
+                ? []
+                : data.conditions.filter(c => c.field && c.operator);
 
             const payload = {
                 name: data.name,
-                condition: JSON.stringify(validConditions),
+                // Store conditions as structured JSON
+                condition: JSON.stringify({
+                    conditions: validConditions,
+                    logical_operator: validConditions.length > 1 ? validConditions[1]?.logic || 'AND' : 'AND'
+                }),
                 step: selectedStepId,
-                next_step: data.next_step || null,
+                next_step: data.is_default ? null : (data.next_step || null),
                 is_default: data.is_default,
                 priority: editingRule?.priority || (rules.length + 1),
             };
@@ -1072,6 +1239,7 @@ const WorkflowRulesTab = ({ workflowId }) => {
             handleCloseModal();
         } catch (error) {
             console.error('Error saving rule:', error);
+            setValidationErrors([error.response?.data?.detail || 'Error saving rule']);
         }
     };
 
@@ -1083,6 +1251,34 @@ const WorkflowRulesTab = ({ workflowId }) => {
             setDeleteConfirm(null);
         } catch (error) {
             console.error('Error deleting rule:', error);
+        }
+    };
+
+    // Handle priority change (move up/down)
+    const handlePriorityChange = async (rule, direction) => {
+        const currentIndex = rules.findIndex(r => r.id === rule.id);
+        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+        if (newIndex < 0 || newIndex >= rules.length) return;
+
+        const newRules = [...rules];
+        [newRules[currentIndex], newRules[newIndex]] = [newRules[newIndex], newRules[currentIndex]];
+
+        // Update priorities
+        const updatedRules = newRules.map((r, idx) => ({
+            ...r,
+            priority: idx + 1
+        }));
+
+        setRules(updatedRules);
+
+        // Persist to backend
+        try {
+            await rulesAPI.update(rule.id, { priority: direction === 'up' ? rule.priority - 1 : rule.priority + 1 });
+            fetchRules(selectedStepId);
+        } catch (error) {
+            console.error('Error updating priority:', error);
+            fetchRules(selectedStepId);
         }
     };
 
@@ -1099,36 +1295,54 @@ const WorkflowRulesTab = ({ workflowId }) => {
             accessorKey: 'priority',
             header: 'Priority',
             cell: ({ row }) => (
-                <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-dark-border flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-700 dark:text-dark-text">
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => handlePriorityChange(row.original, 'up')}
+                        disabled={row.original.priority === 1}
+                        className="p-1 hover:bg-gray-100 dark:hover:bg-dark-border rounded disabled:opacity-30"
+                    >
+                        <ArrowUp className="w-3 h-3" />
+                    </button>
+                    <span className="w-6 text-center text-sm font-medium">
                         {row.original.priority}
                     </span>
+                    <button
+                        onClick={() => handlePriorityChange(row.original, 'down')}
+                        disabled={row.original.priority === rules.length}
+                        className="p-1 hover:bg-gray-100 dark:hover:bg-dark-border rounded disabled:opacity-30"
+                    >
+                        <ArrowDown className="w-3 h-3" />
+                    </button>
                 </div>
             ),
         },
         {
             accessorKey: 'name',
             header: 'Rule Name',
+            cell: ({ row }) => (
+                <span className="font-medium text-gray-900 dark:text-dark-text">
+                    {row.original.name}
+                </span>
+            ),
         },
         {
             accessorKey: 'condition',
             header: 'Conditions',
             cell: ({ row }) => {
-                try {
-                    const cond = typeof row.original.condition === 'string'
-                        ? JSON.parse(row.original.condition)
-                        : row.original.condition;
-                    const conditionText = Array.isArray(cond)
-                        ? cond.map(c => `${c.field} ${c.operator} ${c.value}`).join(` ${cond[0]?.logic || 'AND'} `)
-                        : 'No conditions';
-                    return (
-                        <code className="text-xs bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block max-w-[200px] truncate">
-                            {conditionText}
-                        </code>
-                    );
-                } catch (e) {
-                    return <span className="text-gray-400">-</span>;
-                }
+                const conditionText = formatConditionsDisplay(row.original.condition, fields);
+                return (
+                    <div className="max-w-[250px]">
+                        {row.original.is_default ? (
+                            <span className="text-sm text-gray-500 dark:text-dark-muted italic">
+                                Default rule (no conditions)
+                            </span>
+                        ) : (
+                            <code className="text-xs bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block truncate" title={conditionText}>
+                                {conditionText}
+                            </code>
+                        )}
+                    </div>
+                );
             },
         },
         {
@@ -1139,7 +1353,7 @@ const WorkflowRulesTab = ({ workflowId }) => {
                 return nextStep ? (
                     <Badge variant="info">{nextStep.name}</Badge>
                 ) : (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-400">End Workflow</span>
                 );
             },
         },
@@ -1248,61 +1462,98 @@ const WorkflowRulesTab = ({ workflowId }) => {
                 )}
             </Card>
 
-            {/* Add/Edit Rule Modal with Rule Builder */}
+            {/* Add/Edit Rule Modal with Enhanced Rule Builder */}
             <Modal
                 isOpen={showModal}
                 onClose={handleCloseModal}
                 title={editingRule ? 'Edit Rule' : 'Add Rule'}
-                size="lg"
+                size="xl"
             >
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                    {/* Rule Name */}
                     <Input
                         label="Rule Name"
-                        placeholder="e.g., High Amount Approval"
-                        {...register('name', { required: 'Rule name is required' })}
+                        placeholder="e.g., High Amount Finance Approval"
+                        {...register('name')}
                         error={errors.name?.message}
+                        disabled={watchIsDefault}
                     />
 
-                    {/* Condition Builder */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-2">
-                            Conditions
-                        </label>
-                        <ConditionBuilderWrapper
-                            control={control}
-                            fields={fields}
-                            name="conditions"
-                        />
-                    </div>
-
-                    <Controller
-                        name="next_step"
-                        control={control}
-                        render={({ field }) => (
-                            <Select
-                                label="Next Step"
-                                options={[
-                                    { value: '', label: 'End Workflow' },
-                                    ...availableNextSteps.map(s => ({ value: s.id, label: s.name }))
-                                ]}
-                                value={field.value}
-                                onChange={field.onChange}
-                                helperText="Where to move next when this rule matches"
-                            />
-                        )}
-                    />
-
-                    <div className="flex items-center gap-2">
+                    {/* Default Rule Checkbox */}
+                    <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                         <input
                             type="checkbox"
                             {...register('is_default')}
                             id="is_default"
-                            className="w-4 h-4 rounded border-gray-300 text-primary-600"
+                            className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                         />
-                        <label htmlFor="is_default" className="text-sm text-gray-700 dark:text-dark-text">
-                            Default rule (used when no other rules match)
-                        </label>
+                        <div>
+                            <label htmlFor="is_default" className="text-sm font-medium text-gray-900 dark:text-dark-text">
+                                Default Rule
+                            </label>
+                            <p className="text-xs text-gray-500 dark:text-dark-muted mt-0.5">
+                                This rule executes when no other rules match. Default rules don't need conditions.
+                            </p>
+                        </div>
                     </div>
+
+                    {/* Validation Errors */}
+                    {validationErrors.length > 0 && (
+                        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <ul className="list-disc list-inside text-sm text-red-600 dark:text-red-400">
+                                {validationErrors.map((error, idx) => (
+                                    <li key={idx}>{error}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {/* Condition Builder - Hidden for default rules */}
+                    {!watchIsDefault && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-2">
+                                Conditions
+                            </label>
+                            <p className="text-xs text-gray-500 dark:text-dark-muted mb-3">
+                                Define when this rule should apply. Add multiple conditions and specify how they should be combined.
+                            </p>
+                            <ConditionBuilderWrapper
+                                control={control}
+                                fields={fields}
+                                name="conditions"
+                            />
+                        </div>
+                    )}
+
+                    {/* Next Step - Hidden for default rules */}
+                    {!watchIsDefault && (
+                        <Controller
+                            name="next_step"
+                            control={control}
+                            render={({ field }) => (
+                                <Select
+                                    label="Next Step"
+                                    options={[
+                                        { value: '', label: 'End Workflow' },
+                                        ...availableNextSteps.map(s => ({ value: s.id, label: s.name }))
+                                    ]}
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    helperText="Where to move next when this rule matches"
+                                />
+                            )}
+                        />
+                    )}
+
+                    {/* Info for default rules */}
+                    {watchIsDefault && (
+                        <div className="p-4 bg-gray-50 dark:bg-dark-border rounded-lg">
+                            <p className="text-sm text-gray-600 dark:text-dark-muted">
+                                <strong>Default Rule:</strong> This rule will be used when no other rules match.
+                                It doesn't require conditions and will always route to the selected next step.
+                            </p>
+                        </div>
+                    )}
 
                     <Modal.Footer>
                         <Button type="button" variant="secondary" onClick={handleCloseModal}>
@@ -1367,16 +1618,24 @@ const ConditionBuilderWrapper = ({ control, fields, name }) => {
                 return (
                     <div className="space-y-2">
                         {conditions.map((condition, index) => (
-                            <ConditionBuilder
+                            <ConditionRow
                                 key={index}
                                 condition={condition}
                                 index={index}
                                 fields={fields}
                                 onChange={updateCondition}
                                 onRemove={removeCondition}
+                                canRemove={conditions.length > 1}
+                                showLogic={index > 0}
                             />
                         ))}
-                        <Button type="button" variant="secondary" size="sm" onClick={addCondition}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={addCondition}
+                            className="mt-3"
+                        >
                             <Plus className="w-4 h-4 mr-1" />
                             Add Condition
                         </Button>

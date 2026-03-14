@@ -36,6 +36,8 @@ class WorkflowField(models.Model):
         ("text", "Text"),
         ("number", "Number"),
         ("dropdown", "Dropdown"),
+        ("date", "Date"),
+        ("boolean", "Boolean"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

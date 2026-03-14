@@ -66,7 +66,7 @@ export const workflowsAPI = {
 
 // Workflow Fields API
 export const workflowFieldsAPI = {
-    list: (workflowId) => api.get('/workflows/workflow-fields/', { params: { workflow: workflowId } }),
+    list: (params) => api.get('/workflows/workflow-fields/', { params }),
     get: (id) => api.get(`/workflows/workflow-fields/${id}/`),
     create: (data) => api.post('/workflows/workflow-fields/', data),
     update: (id, data) => api.patch(`/workflows/workflow-fields/${id}/`, data),
