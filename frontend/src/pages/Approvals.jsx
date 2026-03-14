@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { CheckCircle, XCircle, Eye } from 'lucide-react';
-import { executionsAPI } from '../services/api';
+import { CheckCircle, XCircle, Eye, DollarSign, Award } from 'lucide-react';
+import { executionsAPI, approvalsAPI } from '../services/api';
 import { Button, Card, Modal, DataTable, Badge, EmptyState, Input } from '../components/ui';
 import { formatDateTime } from '../utils';
+import { useAuthStore } from '../store';
 
 const Approvals = () => {
     const navigate = useNavigate();
+    const { user, getRoleDisplayName } = useAuthStore();
     const [executions, setExecutions] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedExecution, setSelectedExecution] = useState(null);
@@ -17,13 +19,16 @@ const Approvals = () => {
 
     const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
+    const role = user?.role || 'employee';
+
     useEffect(() => {
         fetchPendingApprovals();
     }, []);
 
     const fetchPendingApprovals = async () => {
         try {
-            const response = await executionsAPI.list({ status: 'pending_approval' });
+            // Use the new approval tasks endpoint
+            const response = await approvalsAPI.list();
             setExecutions(response.data.results || response.data);
         } catch (error) {
             console.error('Error fetching approvals:', error);
@@ -70,44 +75,100 @@ const Approvals = () => {
         }
     };
 
+    // Get the appropriate icon for the role
+    const getRoleIcon = () => {
+        switch (role) {
+            case 'manager':
+                return CheckCircle;
+            case 'finance':
+                return DollarSign;
+            case 'ceo':
+                return Award;
+            case 'admin':
+                return CheckCircle;
+            default:
+                return CheckCircle;
+        }
+    };
+
+    // Get the appropriate title for the role
+    const getTitle = () => {
+        switch (role) {
+            case 'manager':
+                return 'Manager Approvals';
+            case 'finance':
+                return 'Finance Approvals';
+            case 'ceo':
+                return 'Final Approvals';
+            case 'admin':
+                return 'All Approvals';
+            default:
+                return 'Pending Approvals';
+        }
+    };
+
+    // Get the appropriate description for the role
+    const getDescription = () => {
+        switch (role) {
+            case 'manager':
+                return 'Review and approve requests that require manager approval.';
+            case 'finance':
+                return 'Review and approve financial-related requests.';
+            case 'ceo':
+                return 'Final approval for high-priority or high-value requests.';
+            case 'admin':
+                return 'Review all pending workflow approvals.';
+            default:
+                return 'Review and approve workflow requests.';
+        }
+    };
+
     const columns = [
         {
             accessorKey: 'id',
             header: 'Request ID',
-            cell: ({ row }) => <span className="text-gray-500">#{row.original.id}</span>,
+            cell: ({ row }) => <span className="text-gray-500">#{row.original.id?.slice(0, 8)}</span>,
         },
         {
             accessorKey: 'workflow_name',
             header: 'Workflow',
             cell: ({ row }) => (
                 <span className="font-medium text-gray-900 dark:text-dark-text">
-                    {row.original.workflow_name || '-'}
+                    {row.original.workflow?.name || row.original.workflow_name || '-'}
                 </span>
             ),
         },
         {
             accessorKey: 'triggered_by_name',
             header: 'Requester',
-            cell: ({ row }) => row.original.triggered_by_name || '-',
+            cell: ({ row }) => row.original.triggered_by_name || row.original.triggered_by?.username || '-',
         },
         {
-            accessorKey: 'priority',
-            header: 'Priority',
-            cell: ({ row }) => (
-                <Badge
-                    variant={
-                        row.original.priority === 'High' ? 'danger' :
-                            row.original.priority === 'Medium' ? 'warning' : 'default'
-                    }
-                >
-                    {row.original.priority || '-'}
-                </Badge>
-            ),
+            accessorKey: 'pending_approval_from',
+            header: 'Approval Level',
+            cell: ({ row }) => {
+                const approvalType = row.original.pending_approval_from;
+                let badgeVariant = 'default';
+                let label = 'General';
+
+                if (approvalType === 'manager') {
+                    badgeVariant = 'warning';
+                    label = 'Manager';
+                } else if (approvalType === 'finance') {
+                    badgeVariant = 'info';
+                    label = 'Finance';
+                } else if (approvalType === 'ceo') {
+                    badgeVariant = 'danger';
+                    label = 'CEO';
+                }
+
+                return <Badge variant={badgeVariant}>{label}</Badge>;
+            },
         },
         {
-            accessorKey: 'created_at',
+            accessorKey: 'started_at',
             header: 'Submitted Time',
-            cell: ({ row }) => formatDateTime(row.original.created_at),
+            cell: ({ row }) => formatDateTime(row.original.started_at),
         },
         {
             id: 'actions',
@@ -142,21 +203,23 @@ const Approvals = () => {
         },
     ];
 
+    const RoleIcon = getRoleIcon();
+
     return (
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-dark-text">
-                    Pending Approvals
+                    {getTitle()}
                 </h1>
                 <p className="text-gray-500 dark:text-dark-muted mt-1">
-                    Review and approve workflow requests.
+                    {getDescription()}
                 </p>
             </div>
 
             <Card className="p-0">
                 {executions.length === 0 && !isLoading ? (
                     <EmptyState
-                        icon={CheckCircle}
+                        icon={RoleIcon}
                         title="No pending approvals"
                         description="All workflow requests have been processed."
                     />
@@ -182,24 +245,30 @@ const Approvals = () => {
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-dark-muted">Request ID</p>
                                 <p className="font-medium text-gray-900 dark:text-dark-text">
-                                    #{selectedExecution.id}
+                                    #{selectedExecution.id?.slice(0, 8)}
                                 </p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-dark-muted">Workflow</p>
                                 <p className="font-medium text-gray-900 dark:text-dark-text">
-                                    {selectedExecution.workflow_name || '-'}
+                                    {selectedExecution.workflow?.name || selectedExecution.workflow_name || '-'}
                                 </p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-dark-muted">Requester</p>
                                 <p className="font-medium text-gray-900 dark:text-dark-text">
-                                    {selectedExecution.triggered_by_name || '-'}
+                                    {selectedExecution.triggered_by_name || selectedExecution.triggered_by?.username || '-'}
                                 </p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-dark-muted">Status</p>
                                 <Badge>{selectedExecution.status}</Badge>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-500 dark:text-dark-muted">Pending Approval From</p>
+                                <Badge variant={selectedExecution.pending_approval_from === 'ceo' ? 'danger' : selectedExecution.pending_approval_from === 'finance' ? 'info' : 'warning'}>
+                                    {selectedExecution.pending_approval_from || 'General'}
+                                </Badge>
                             </div>
                         </div>
 

@@ -32,7 +32,10 @@ const Executions = () => {
             case 'failed':
                 return <XCircle className="w-4 h-4 text-red-500" />;
             case 'running':
+            case 'in_progress':
                 return <Clock className="w-4 h-4 text-yellow-500" />;
+            case 'pending':
+                return <Clock className="w-4 h-4 text-blue-500" />;
             default:
                 return <Clock className="w-4 h-4 text-gray-500" />;
         }
@@ -60,11 +63,13 @@ const Executions = () => {
                 <div className="flex items-center gap-2">
                     {getStatusIcon(row.original.status)}
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${row.original.status === 'completed'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                            : row.original.status === 'failed'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                : row.original.status === 'running'
-                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        : row.original.status === 'failed'
+                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                            : row.original.status === 'running' || row.original.status === 'in_progress'
+                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                : row.original.status === 'pending'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
                                     : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                         }`}>
                         {row.original.status}

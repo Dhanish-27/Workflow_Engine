@@ -10,6 +10,8 @@ import {
     FileText,
     CheckSquare,
     X,
+    DollarSign,
+    Award,
 } from 'lucide-react';
 import { cn } from '../../utils';
 import { useUIStore, useAuthStore } from '../../store';
@@ -21,12 +23,33 @@ const adminMenuItems = [
     { path: '/steps', icon: ListOrdered, label: 'Steps' },
     { path: '/rules', icon: BookOpen, label: 'Rules' },
     { path: '/executions', icon: PlayCircle, label: 'Executions' },
+    { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
+    { path: '/create-request', icon: FileText, label: 'Create Request' },
+    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
 ];
 
 const managerMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/approvals', icon: CheckSquare, label: 'My Approvals' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
+    { path: '/create-request', icon: FileText, label: 'Create Request' },
+    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
+];
+
+const financeMenuItems = [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/approvals', icon: DollarSign, label: 'Finance Approvals' },
+    { path: '/executions', icon: PlayCircle, label: 'Execution History' },
+    { path: '/create-request', icon: FileText, label: 'Create Request' },
+    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
+];
+
+const ceoMenuItems = [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/approvals', icon: Award, label: 'Final Approvals' },
+    { path: '/executions', icon: PlayCircle, label: 'Execution History' },
+    { path: '/create-request', icon: FileText, label: 'Create Request' },
+    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
 ];
 
 const employeeMenuItems = [
@@ -37,14 +60,28 @@ const employeeMenuItems = [
 
 const Sidebar = () => {
     const { sidebarOpen, toggleSidebar } = useUIStore();
-    const { user } = useAuthStore();
+    const { user, getRoleDisplayName } = useAuthStore();
 
-    const role = user?.role || 'Employee';
-    const menuItems = role === 'Admin'
-        ? adminMenuItems
-        : role === 'Manager'
-            ? managerMenuItems
-            : employeeMenuItems;
+    const role = user?.role || 'employee';
+
+    // Get menu items based on role
+    let menuItems;
+    switch (role) {
+        case 'admin':
+            menuItems = adminMenuItems;
+            break;
+        case 'manager':
+            menuItems = managerMenuItems;
+            break;
+        case 'finance':
+            menuItems = financeMenuItems;
+            break;
+        case 'ceo':
+            menuItems = ceoMenuItems;
+            break;
+        default:
+            menuItems = employeeMenuItems;
+    }
 
     return (
         <>
@@ -113,7 +150,7 @@ const Sidebar = () => {
                                 {user?.name || user?.email || 'User'}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-dark-muted truncate">
-                                {role}
+                                {getRoleDisplayName()}
                             </p>
                         </div>
                     </div>

@@ -124,7 +124,7 @@ const Users = () => {
             accessorKey: 'role',
             header: 'Role',
             cell: ({ row }) => (
-                <Badge variant={row.original.role === 'Admin' ? 'info' : 'default'}>
+                <Badge variant={row.original.role === 'admin' ? 'info' : 'default'}>
                     {row.original.role}
                 </Badge>
             ),

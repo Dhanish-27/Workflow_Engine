@@ -23,9 +23,13 @@ const CreateRequest = () => {
     const fetchWorkflows = async () => {
         try {
             const response = await workflowsAPI.list({ is_active: true });
-            setWorkflows(response.data.results || response.data);
+            const data = response.data;
+            // Handle both paginated and non-paginated responses
+            const workflowList = Array.isArray(data) ? data : (data.results || []);
+            setWorkflows(workflowList);
         } catch (error) {
             console.error('Error fetching workflows:', error);
+            setWorkflows([]);
         } finally {
             setIsLoading(false);
         }

@@ -99,23 +99,27 @@ export const executionsAPI = {
     create: (data) => api.post('/executions/', data),
     approve: (id, data) => api.post(`/executions/${id}/approve/`, data),
     reject: (id, data) => api.post(`/executions/${id}/reject/`, data),
+    cancel: (id) => api.post(`/executions/${id}/cancel/`),
+    retry: (id) => api.post(`/executions/${id}/retry/`),
     getLogs: (id) => api.get(`/executions/${id}/logs/`),
     getTimeline: (id) => api.get(`/executions/${id}/timeline/`),
 };
 
-// Approvals API
+// Approvals API - Role-based approval tasks
 export const approvalsAPI = {
-    list: (params) => api.get('/approvals/', { params }),
+    list: (params) => api.get('/executions/approvals/', { params }),
     get: (id) => api.get(`/approvals/${id}/`),
-    approve: (id, data) => api.post(`/approvals/${id}/approve/`, data),
-    reject: (id, data) => api.post(`/approvals/${id}/reject/`, data),
+    approve: (id, data) => api.post(`/executions/${id}/approve/`, data),
+    reject: (id, data) => api.post(`/executions/${id}/reject/`, data),
 };
 
 // Dashboard API
 export const dashboardAPI = {
-    stats: () => api.get('/dashboard/stats/'),
-    chartData: (params) => api.get('/dashboard/chart-data/', { params }),
-    recentExecutions: (params) => api.get('/dashboard/recent-executions/', { params }),
+    stats: () => api.get('/executions/dashboard/stats/'),
+    chartData: () => api.get('/executions/dashboard/chart-data/'),
+    recentExecutions: () => api.get('/executions/dashboard/recent/'),
+    userStats: () => api.get('/executions/dashboard/user-stats/'),
+    managerStats: () => api.get('/executions/dashboard/manager-stats/'),
 };
 
 // Notifications API

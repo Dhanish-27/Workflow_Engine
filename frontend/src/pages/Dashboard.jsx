@@ -22,7 +22,7 @@ import {
 } from 'recharts';
 import { useAuthStore } from '../store';
 import { Card } from '../components/ui';
-import { executionsAPI } from '../services/api';
+import { executionsAPI, dashboardAPI } from '../services/api';
 import { formatDateTime } from '../utils';
 
 const Dashboard = () => {
@@ -47,42 +47,49 @@ const Dashboard = () => {
 
     const fetchDashboardData = async () => {
         try {
-            // Fetch executions for dashboard
-            const response = await executionsAPI.list({ page_size: 10 });
-            const executions = response.data.results || response.data;
+            // Fetch dashboard stats
+            const statsResponse = await dashboardAPI.stats();
+            const statsData = statsResponse.data;
 
-            // Calculate stats
-            const running = executions.filter(e => e.status === 'running').length;
-            const completed = executions.filter(e => e.status === 'completed').length;
-            const failed = executions.filter(e => e.status === 'failed').length;
+            // Fetch chart data
+            const chartResponse = await dashboardAPI.chartData();
+            const chartDataFromApi = chartResponse.data;
+
+            // Fetch recent executions
+            const recentResponse = await dashboardAPI.recentExecutions();
+            const executions = recentResponse.data || [];
 
             setStats({
-                totalUsers: 12, // Placeholder - would come from API
-                totalWorkflows: 8,
-                runningExecutions: running,
-                completedExecutions: completed,
-                failedExecutions: failed,
+                totalUsers: statsData.total_users,
+                totalWorkflows: statsData.total_workflows,
+                runningExecutions: statsData.running_executions,
+                completedExecutions: statsData.completed_executions,
+                failedExecutions: statsData.failed_executions,
             });
 
-            // Generate chart data (last 7 days)
-            const days = [];
-            for (let i = 6; i >= 0; i--) {
-                const date = new Date();
-                date.setDate(date.getDate() - i);
-                const dateStr = date.toISOString().split('T')[0];
-
-                // Mock data - in production would come from API
-                days.push({
-                    date: dateStr,
-                    completed: Math.floor(Math.random() * 10) + 1,
-                    failed: Math.floor(Math.random() * 3),
-                });
-            }
-            setChartData(days);
-
+            setChartData(chartDataFromApi);
             setRecentExecutions(executions);
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
+            // Fallback: try to fetch executions directly
+            try {
+                const response = await executionsAPI.list({ page_size: 10 });
+                const executions = response.data.results || response.data;
+
+                const running = executions.filter(e => e.status === 'running' || e.status === 'in_progress').length;
+                const completed = executions.filter(e => e.status === 'completed').length;
+                const failed = executions.filter(e => e.status === 'failed').length;
+
+                setStats(prev => ({
+                    ...prev,
+                    runningExecutions: running,
+                    completedExecutions: completed,
+                    failedExecutions: failed,
+                }));
+                setRecentExecutions(executions);
+            } catch (execError) {
+                console.error('Error fetching executions:', execError);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -134,11 +141,11 @@ const Dashboard = () => {
 
     const COLORS = ['#10B981', '#F59E0B', '#EF4444'];
 
-    if (role === 'Employee') {
+    if (role === 'employee') {
         return <EmployeeDashboard />;
     }
 
-    if (role === 'Manager') {
+    if (role === 'manager') {
         return <ManagerDashboard />;
     }
 
@@ -270,9 +277,11 @@ const Dashboard = () => {
                                             ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                                             : execution.status === 'failed'
                                                 ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                                : execution.status === 'running'
+                                                : execution.status === 'running' || execution.status === 'in_progress'
                                                     ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                                                    : execution.status === 'pending'
+                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                                             }`}>
                                             {execution.status}
                                         </span>
@@ -297,6 +306,23 @@ const Dashboard = () => {
 const EmployeeDashboard = () => {
     const navigate = useNavigate();
     const { user } = useAuthStore();
+    const [userStats, setUserStats] = useState({ pending: 0, completed: 0, in_progress: 0, failed: 0 });
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        fetchUserStats();
+    }, []);
+
+    const fetchUserStats = async () => {
+        try {
+            const response = await dashboardAPI.userStats();
+            setUserStats(response.data);
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -355,7 +381,7 @@ const EmployeeDashboard = () => {
                             Quick Stats
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-dark-muted">
-                            3 pending • 5 completed
+                            {userStats.pending} pending • {userStats.completed} completed
                         </p>
                     </div>
                 </Card>
@@ -367,6 +393,23 @@ const EmployeeDashboard = () => {
 // Manager Dashboard
 const ManagerDashboard = () => {
     const navigate = useNavigate();
+    const [managerStats, setManagerStats] = useState({ pending_approvals: 0, approved_this_week: 0, rejected_this_week: 0 });
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        fetchManagerStats();
+    }, []);
+
+    const fetchManagerStats = async () => {
+        try {
+            const response = await dashboardAPI.managerStats();
+            setManagerStats(response.data);
+        } catch (error) {
+            console.error('Error fetching manager stats:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -392,7 +435,7 @@ const ManagerDashboard = () => {
                             Pending Approvals
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-dark-muted">
-                            5 requests waiting
+                            {managerStats.pending_approvals} requests waiting
                         </p>
                     </div>
                 </Card>
@@ -423,7 +466,7 @@ const ManagerDashboard = () => {
                             This Week
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-dark-muted">
-                            12 approved • 3 rejected
+                            {managerStats.approved_this_week} approved • {managerStats.rejected_this_week} rejected
                         </p>
                     </div>
                 </Card>

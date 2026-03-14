@@ -1,25 +1,49 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Helper to check if user is logged in from localStorage
+const getInitialAuthState = () => {
+    try {
+        const token = localStorage.getItem('token');
+        const userStr = localStorage.getItem('user');
+        if (token && userStr) {
+            const user = JSON.parse(userStr);
+            return {
+                user,
+                token,
+                isAuthenticated: true,
+                isLoading: false
+            };
+        }
+    } catch (e) {
+        console.error('Error reading auth from localStorage:', e);
+    }
+    return {
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false
+    };
+};
+
+const initialAuthState = getInitialAuthState();
+
 export const useAuthStore = create(
     persist(
         (set, get) => ({
-            user: null,
-            token: null,
-            isAuthenticated: false,
-            isLoading: false,
+            ...initialAuthState,
 
             setUser: (user) => set({ user, isAuthenticated: !!user }),
             setToken: (token) => set({ token }),
 
             login: (user, token) => {
-                set({ user, token, isAuthenticated: true });
+                set({ user, token, isAuthenticated: true, isLoading: false });
                 localStorage.setItem('token', token);
                 localStorage.setItem('user', JSON.stringify(user));
             },
 
             logout: () => {
-                set({ user: null, token: null, isAuthenticated: false });
+                set({ user: null, token: null, isAuthenticated: false, isLoading: false });
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
             },
@@ -31,13 +55,46 @@ export const useAuthStore = create(
                 return user?.role || null;
             },
 
-            isAdmin: () => get().getUserRole() === 'Admin',
-            isManager: () => get().getUserRole() === 'Manager',
-            isEmployee: () => get().getUserRole() === 'Employee',
+            // Role-based checks
+            isAdmin: () => get().getUserRole() === 'admin',
+            isManager: () => get().getUserRole() === 'manager',
+            isEmployee: () => get().getUserRole() === 'employee',
+            isFinance: () => get().getUserRole() === 'finance',
+            isCEO: () => get().getUserRole() === 'ceo',
+
+            // Combined role checks
+            canManageWorkflows: () => get().isAdmin(),
+            canManageUsers: () => get().isAdmin(),
+            canManageSteps: () => get().isAdmin(),
+            canManageRules: () => get().isAdmin(),
+            canExecuteWorkflow: () => get().isEmployee() || get().isAdmin(),
+            canApprove: () => get().isManager() || get().isFinance() || get().isCEO() || get().isAdmin(),
+            canViewAllExecutions: () => get().isAdmin() || get().isManager(),
+            canViewOwnExecutions: () => true,
+            canCancelExecution: () => get().isAdmin(),
+            canRetryExecution: () => get().isAdmin(),
+            canViewApprovalTasks: () => get().isManager() || get().isFinance() || get().isCEO() || get().isAdmin(),
+
+            // Get role display name
+            getRoleDisplayName: () => {
+                const role = get().getUserRole();
+                const roleNames = {
+                    admin: 'Administrator',
+                    manager: 'Manager',
+                    employee: 'Employee',
+                    finance: 'Finance',
+                    ceo: 'CEO'
+                };
+                return roleNames[role] || role;
+            }
         }),
         {
             name: 'auth-storage',
-            partialize: (state) => ({ token: state.token, user: state.user }),
+            partialize: (state) => ({
+                token: state.token,
+                user: state.user,
+                isAuthenticated: state.isAuthenticated
+            }),
         }
     )
 );

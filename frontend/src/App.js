@@ -33,11 +33,15 @@ function App() {
     const getDefaultPath = () => {
         if (!user) return '/login';
         switch (user.role) {
-            case 'Admin':
+            case 'admin':
                 return '/dashboard';
-            case 'Manager':
+            case 'manager':
                 return '/approvals';
-            case 'Employee':
+            case 'finance':
+                return '/approvals';
+            case 'ceo':
+                return '/approvals';
+            case 'employee':
                 return '/dashboard';
             default:
                 return '/dashboard';
@@ -57,53 +61,53 @@ function App() {
                     {/* Dashboard - All roles */}
                     <Route path="/dashboard" element={<Dashboard />} />
 
-                    {/* Admin Routes */}
+                    {/* Admin Routes - Full system control */}
                     <Route path="/users" element={
-                        <PrivateRoute allowedRoles={['Admin']}>
+                        <PrivateRoute allowedRoles={['admin']}>
                             <Users />
                         </PrivateRoute>
                     } />
                     <Route path="/workflows" element={
-                        <PrivateRoute allowedRoles={['Admin']}>
+                        <PrivateRoute allowedRoles={['admin']}>
                             <Workflows />
                         </PrivateRoute>
                     } />
                     <Route path="/workflows/:id/configure" element={
-                        <PrivateRoute allowedRoles={['Admin']}>
+                        <PrivateRoute allowedRoles={['admin']}>
                             <WorkflowConfigure />
                         </PrivateRoute>
                     } />
                     <Route path="/steps" element={
-                        <PrivateRoute allowedRoles={['Admin']}>
+                        <PrivateRoute allowedRoles={['admin']}>
                             <Workflows />
                         </PrivateRoute>
                     } />
                     <Route path="/rules" element={
-                        <PrivateRoute allowedRoles={['Admin']}>
+                        <PrivateRoute allowedRoles={['admin']}>
                             <Workflows />
                         </PrivateRoute>
                     } />
                     <Route path="/executions" element={
-                        <PrivateRoute allowedRoles={['Admin', 'Manager']}>
+                        <PrivateRoute allowedRoles={['admin', 'manager', 'finance', 'ceo']}>
                             <Executions />
                         </PrivateRoute>
                     } />
 
-                    {/* Manager Routes */}
+                    {/* Approval Routes - Manager, Finance, CEO, Admin */}
                     <Route path="/approvals" element={
-                        <PrivateRoute allowedRoles={['Manager']}>
+                        <PrivateRoute allowedRoles={['manager', 'finance', 'ceo', 'admin']}>
                             <Approvals />
                         </PrivateRoute>
                     } />
 
-                    {/* Employee Routes */}
+                    {/* Request Routes - All authenticated users can create requests */}
                     <Route path="/create-request" element={
-                        <PrivateRoute allowedRoles={['Employee']}>
+                        <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'ceo', 'finance']}>
                             <CreateRequest />
                         </PrivateRoute>
                     } />
                     <Route path="/my-requests" element={
-                        <PrivateRoute allowedRoles={['Employee']}>
+                        <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'ceo', 'finance']}>
                             <MyRequests />
                         </PrivateRoute>
                     } />

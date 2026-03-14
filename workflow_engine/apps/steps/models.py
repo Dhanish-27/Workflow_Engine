@@ -10,6 +10,14 @@ class Step(models.Model):
         ("notification", "Notification"),
     )
 
+    # Approval types for different roles
+    APPROVAL_TYPES = (
+        ("general", "General Approval"),
+        ("manager_approval", "Manager Approval"),
+        ("finance_approval", "Finance Approval"),
+        ("ceo_approval", "CEO Approval"),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     workflow = models.ForeignKey(
@@ -25,6 +33,23 @@ class Step(models.Model):
         choices=STEP_TYPES
     )
 
+    # Approval type determines which role can approve this step
+    approval_type = models.CharField(
+        max_length=30,
+        choices=APPROVAL_TYPES,
+        default="general",
+        blank=True
+    )
+
+    # Optional: Assign specific approver by user ID
+    assigned_to = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_steps"
+    )
+
     order = models.IntegerField()
 
     metadata = models.JSONField(default=dict)
@@ -38,3 +63,10 @@ class Step(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def required_role(self):
+        """Returns the role required to approve this step"""
+        if self.step_type != "approval":
+            return None
+        return self.approval_type

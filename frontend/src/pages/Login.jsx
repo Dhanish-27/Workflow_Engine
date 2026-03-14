@@ -26,9 +26,9 @@ const Login = () => {
             login(user, access);
 
             // Redirect based on role
-            if (user.role === 'Admin') {
+            if (user.role === 'admin') {
                 navigate('/dashboard');
-            } else if (user.role === 'Manager') {
+            } else if (user.role === 'manager') {
                 navigate('/approvals');
             } else {
                 navigate('/dashboard');

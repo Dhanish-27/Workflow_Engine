@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, CheckCircle, XCircle, Clock, PlayCircle } from 'lucide-react';
 import { executionsAPI } from '../services/api';
+import { useAuthStore } from '../store';
 import { Button, Card, DataTable, Badge, EmptyState, Modal } from '../components/ui';
 import { formatDateTime } from '../utils';
 
 const MyRequests = () => {
     const navigate = useNavigate();
+    const { user } = useAuthStore();
     const [executions, setExecutions] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedExecution, setSelectedExecution] = useState(null);
@@ -18,10 +20,32 @@ const MyRequests = () => {
 
     const fetchMyExecutions = async () => {
         try {
-            const response = await executionsAPI.list();
-            setExecutions(response.data.results || response.data);
+            // Filter by current user - triggered_by should be the current user's ID
+            const userId = user?.id;
+            if (userId) {
+                const response = await executionsAPI.list({ triggered_by: userId });
+                setExecutions(response.data.results || response.data);
+            } else {
+                // Fallback: if no user ID, try to get all and filter client-side
+                const response = await executionsAPI.list();
+                setExecutions(response.data.results || response.data);
+            }
         } catch (error) {
             console.error('Error fetching executions:', error);
+            // Fallback: try without filter
+            try {
+                const response = await executionsAPI.list();
+                const allExecutions = response.data.results || response.data;
+                // Filter client-side by matching user email or id
+                const userEmail = user?.email;
+                const filtered = allExecutions.filter(e =>
+                    e.triggered_by_email === userEmail ||
+                    e.triggered_by === user?.id
+                );
+                setExecutions(filtered);
+            } catch (fallbackError) {
+                console.error('Error fetching executions:', fallbackError);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -44,7 +68,10 @@ const MyRequests = () => {
             case 'failed':
                 return <XCircle className="w-4 h-4 text-red-500" />;
             case 'running':
+            case 'in_progress':
                 return <Clock className="w-4 h-4 text-yellow-500" />;
+            case 'pending':
+                return <Clock className="w-4 h-4 text-blue-500" />;
             default:
                 return <Clock className="w-4 h-4 text-gray-500" />;
         }
@@ -72,11 +99,13 @@ const MyRequests = () => {
                 <div className="flex items-center gap-2">
                     {getStatusIcon(row.original.status)}
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${row.original.status === 'completed'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                            : row.original.status === 'failed'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                : row.original.status === 'running'
-                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        : row.original.status === 'failed'
+                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                            : row.original.status === 'running' || row.original.status === 'in_progress'
+                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                : row.original.status === 'pending'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
                                     : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                         }`}>
                         {row.original.status}
@@ -205,8 +234,8 @@ const MyRequests = () => {
                                     {selectedExecution.timeline.map((step, index) => (
                                         <div key={index} className="flex items-start gap-3">
                                             <div className={`w-3 h-3 rounded-full mt-1.5 ${step.status === 'completed' ? 'bg-green-500' :
-                                                    step.status === 'current' ? 'bg-yellow-500' :
-                                                        'bg-gray-300 dark:bg-gray-600'
+                                                step.status === 'current' ? 'bg-yellow-500' :
+                                                    'bg-gray-300 dark:bg-gray-600'
                                                 }`} />
                                             <div className="flex-1">
                                                 <p className="text-sm font-medium text-gray-900 dark:text-dark-text">
