@@ -394,10 +394,10 @@ const Rules = () => {
     const validateRule = (data) => {
         const errors = [];
 
-        if (!data.name || data.name.trim() === '') {
-            errors.push('Rule name is required');
-        }
-
+        // if (!data.name || data.name.trim() === '') {
+        //     errors.push('Rule name is required');
+        // }
+        
         if (data.is_default) {
             const validConditions = data.conditions?.filter(c => c.field && c.operator);
             if (validConditions && validConditions.length > 0) {
@@ -414,9 +414,9 @@ const Rules = () => {
                 errors.push('At least one condition is required for non-default rules');
             }
 
-            if (!data.next_step) {
-                errors.push('Next step is required for non-default rules');
-            }
+            // if (!data.next_step) {
+            //     errors.push('Next step is required for non-default rules');
+            // }
         }
 
         setValidationErrors(errors);

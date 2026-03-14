@@ -119,11 +119,8 @@ class RuleSerializer(serializers.ModelSerializer):
             # Default rules don't need a next_step
             # But if there's no next_step, the workflow will end
         else:
-            # Non-default rules must have a next_step
-            if not next_step:
-                raise serializers.ValidationError({
-                    'next_step': 'Next step is required for non-default rules'
-                })
+            # Non-default rules can have a null next_step, which ends the workflow
+            pass
         
         return attrs
     

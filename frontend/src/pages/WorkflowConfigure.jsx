@@ -1095,7 +1095,7 @@ const WorkflowRulesTab = ({ workflowId }) => {
         try {
             const [stepsRes, fieldsRes] = await Promise.all([
                 stepsAPI.list({ workflow: workflowId }),
-                workflowFieldsAPI.list(workflowId),
+                workflowFieldsAPI.list({ workflow: workflowId }),
             ]);
 
             const stepsData = stepsRes.data.results || stepsRes.data;
@@ -1135,10 +1135,11 @@ const WorkflowRulesTab = ({ workflowId }) => {
     const validateRule = (data) => {
         const errors = [];
 
-        // Check rule name
-        if (!data.name || data.name.trim() === '') {
-            errors.push('Rule name is required');
-        }
+        // Check rule name - only required for non-default rules IF name is empty
+        // Backend auto-generates names, so we might not need this on frontend
+        // if (!data.name || data.name.trim() === '') {
+        //    errors.push('Rule name is required');
+        // }
 
         // Check default rule constraints
         if (data.is_default) {
@@ -1161,10 +1162,10 @@ const WorkflowRulesTab = ({ workflowId }) => {
             }
         }
 
-        // Check next step
-        if (!data.is_default && !data.next_step) {
-            errors.push('Next step is required for non-default rules');
-        }
+        // Next step is optional - selecting "End Workflow" (empty string) will send null
+        // if (!data.is_default && !data.next_step) {
+        //     errors.push('Next step is required for non-default rules');
+        // }
 
         setValidationErrors(errors);
         return errors.length === 0;
