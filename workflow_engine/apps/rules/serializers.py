@@ -9,6 +9,10 @@ class RuleSerializer(serializers.ModelSerializer):
     next_step_name = serializers.SerializerMethodField()
     step_name = serializers.SerializerMethodField()
     
+    # Explicitly return step and next_step as UUID strings
+    step = serializers.SerializerMethodField()
+    next_step = serializers.SerializerMethodField()
+    
     class Meta:
         model = Rule
         fields = [
@@ -17,6 +21,14 @@ class RuleSerializer(serializers.ModelSerializer):
             'is_default', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_step(self, obj):
+        """Return step UUID as string for visual builder"""
+        return str(obj.step_id) if obj.step else None
+    
+    def get_next_step(self, obj):
+        """Return next_step UUID as string for visual builder"""
+        return str(obj.next_step_id) if obj.next_step else None
     
     def get_next_step_name(self, obj):
         if obj.next_step:

@@ -132,9 +132,9 @@ const formatFieldType = (type) => {
 // Custom Node for React Flow
 const StepNode = ({ data, selected }) => {
     const stepTypeColors = {
-        task: 'bg-blue-100 border-blue-500 dark:bg-blue-900/30 dark:border-blue-600',
-        approval: 'bg-yellow-100 border-yellow-500 dark:bg-yellow-900/30 dark:border-yellow-600',
-        notification: 'bg-purple-100 border-purple-500 dark:bg-purple-900/30 dark:border-purple-600',
+        task: 'bg-blue-50 border-blue-500 dark:bg-blue-900/30 dark:border-blue-500',
+        approval: 'bg-yellow-50 border-yellow-500 dark:bg-yellow-900/30 dark:border-yellow-500',
+        notification: 'bg-purple-50 border-purple-500 dark:bg-purple-900/30 dark:border-purple-500',
     };
 
     const stepTypeLabels = {
@@ -143,25 +143,46 @@ const StepNode = ({ data, selected }) => {
         notification: 'Notification',
     };
 
+    const stepTypeIcons = {
+        task: '📋',
+        approval: '✅',
+        notification: '🔔',
+    };
+
     return (
         <div className={cn(
-            'px-4 py-3 rounded-lg border-2 shadow-md min-w-[180px]',
-            stepTypeColors[data.stepType] || 'bg-gray-100 border-gray-400',
-            selected && 'ring-2 ring-primary-500 ring-offset-2'
+            'px-4 py-3 rounded-lg border-2 shadow-lg min-w-[200px] transition-all duration-200',
+            stepTypeColors[data.stepType] || 'bg-gray-50 border-gray-400',
+            selected && 'ring-2 ring-primary-500 ring-offset-2 shadow-xl'
         )}>
-            <Handle type="target" position={Position.Top} className="!bg-gray-400" />
-            <div className="text-sm font-semibold text-gray-900 dark:text-dark-text">
-                {data.label}
-            </div>
-            <div className="text-xs text-gray-600 dark:text-dark-muted mt-1">
-                {stepTypeLabels[data.stepType] || data.stepType}
-            </div>
-            {data.approvalType && (
-                <div className="text-xs text-gray-500 dark:text-dark-muted mt-1">
-                    {data.approvalType}
+            <Handle type="target" position={Position.Top} className="!bg-gray-400 !w-3 !h-3" />
+
+            {/* Step Order Badge */}
+            {data.order !== undefined && (
+                <div className="absolute -top-2 -left-2 w-6 h-6 bg-primary-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                    {data.order + 1}
                 </div>
             )}
-            <Handle type="source" position={Position.Bottom} className="!bg-gray-400" />
+
+            <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">{stepTypeIcons[data.stepType] || '📌'}</span>
+                <div className="text-sm font-bold text-gray-900 dark:text-dark-text truncate">
+                    {data.label}
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+                <Badge variant={data.stepType === 'task' ? 'info' : data.stepType === 'approval' ? 'warning' : 'default'}>
+                    {stepTypeLabels[data.stepType] || data.stepType}
+                </Badge>
+                {data.approvalType && (
+                    <span className="text-xs text-gray-500 dark:text-dark-muted">
+                        ({data.approvalType.replace('_', ' ')})
+                    </span>
+                )}
+            </div>
+
+            <Handle type="source" position={Position.Bottom} className="!bg-gray-400 !w-3 !h-3" />
         </div>
     );
 };
@@ -1655,20 +1676,28 @@ const VisualBuilderTab = ({ workflowId }) => {
     const [steps, setSteps] = useState([]);
     const [rules, setRules] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: { distance: 10 },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
         })
     );
 
     useEffect(() => {
-        fetchData();
+        if (workflowId) {
+            fetchData();
+        }
     }, [workflowId]);
 
     const fetchData = async () => {
+        setIsLoading(true);
+        setError(null);
         try {
             const [stepsRes, rulesRes] = await Promise.all([
                 stepsAPI.list({ workflow: workflowId }),
@@ -1678,49 +1707,98 @@ const VisualBuilderTab = ({ workflowId }) => {
             const stepsData = stepsRes.data.results || stepsRes.data;
             const rulesData = rulesRes.data.results || rulesRes.data;
 
-            setSteps(stepsData.sort((a, b) => a.order - b.order));
+            // Sort steps by order
+            const sortedSteps = stepsData.sort((a, b) => a.order - b.order);
+            setSteps(sortedSteps);
             setRules(rulesData);
 
             // Build nodes and edges
-            buildGraph(stepsData, rulesData);
+            buildGraph(sortedSteps, rulesData);
         } catch (error) {
             console.error('Error fetching data:', error);
+            setError('Failed to load workflow data. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
     const buildGraph = (stepsData, rulesData) => {
-        // Create nodes
+        // Ensure we have steps
+        if (!stepsData || stepsData.length === 0) {
+            setNodes([]);
+            setEdges([]);
+            return;
+        }
+
+        // Create nodes with better positioning
         const newNodes = stepsData.map((step, index) => ({
-            id: step.id,
+            id: String(step.id), // Ensure string UUID
             type: 'stepNode',
-            position: { x: 250, y: index * 150 + 50 },
+            position: {
+                x: 250,
+                y: index * 180 + 50 // More spacing between nodes
+            },
             data: {
-                label: step.name,
-                stepType: step.step_type,
-                approvalType: step.approval_type,
+                label: step.name || 'Unnamed Step',
+                stepType: step.step_type || 'task',
+                approvalType: step.approval_type || null,
+                order: step.order,
             },
         }));
 
-        // Create edges from rules
+        // Create edges from rules with proper UUID handling
         const newEdges = [];
         rulesData.forEach((rule) => {
-            if (rule.next_step) {
+            const sourceId = String(rule.step);
+            const targetId = rule.next_step ? String(rule.next_step) : null;
+
+            // Only create edge if both source and target exist
+            if (sourceId && targetId) {
+                // Check if both nodes exist in our nodes array
+                const sourceNodeExists = stepsData.some(s => String(s.id) === sourceId);
+                const targetNodeExists = stepsData.some(s => String(s.id) === targetId);
+
+                if (sourceNodeExists && targetNodeExists) {
+                    newEdges.push({
+                        id: `e-${rule.id}`,
+                        source: sourceId,
+                        target: targetId,
+                        label: rule.is_default ? 'Default' : (rule.name || 'Rule'),
+                        type: 'smoothstep',
+                        animated: rule.is_default,
+                        style: rule.is_default
+                            ? { stroke: '#10b981', strokeWidth: 2 }
+                            : { stroke: '#6b7280', strokeWidth: 1.5 },
+                        labelStyle: { fill: '#374151', fontWeight: 500 },
+                        labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9 },
+                        markerEnd: {
+                            type: MarkerType.ArrowClosed,
+                            color: rule.is_default ? '#10b981' : '#6b7280',
+                        },
+                    });
+                }
+            }
+        });
+
+        // Add default flow edges if no rules define the flow
+        // This creates sequential connections between steps if no explicit rules exist
+        if (newEdges.length === 0 && stepsData.length > 1) {
+            for (let i = 0; i < stepsData.length - 1; i++) {
                 newEdges.push({
-                    id: `e-${rule.id}`,
-                    source: rule.step,
-                    target: rule.next_step,
-                    label: rule.is_default ? 'default' : rule.name,
+                    id: `e-default-${stepsData[i].id}`,
+                    source: String(stepsData[i].id),
+                    target: String(stepsData[i + 1].id),
+                    label: 'Next',
                     type: 'smoothstep',
-                    animated: rule.is_default,
-                    style: rule.is_default ? { stroke: '#10b981' } : { stroke: '#6b7280' },
+                    style: { stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '5,5' },
+                    labelStyle: { fill: '#6b7280', fontSize: 10 },
                     markerEnd: {
                         type: MarkerType.ArrowClosed,
+                        color: '#9ca3af',
                     },
                 });
             }
-        });
+        }
 
         setNodes(newNodes);
         setEdges(newEdges);
@@ -1731,8 +1809,38 @@ const VisualBuilderTab = ({ workflowId }) => {
             ...params,
             type: 'smoothstep',
             markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: '#6b7280' },
         }, eds));
     }, [setEdges]);
+
+    const onNodeDragStop = useCallback(() => {
+        // Could save position here if needed
+    }, []);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-96">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="space-y-6">
+                <Card>
+                    <EmptyState
+                        icon={AlertCircle}
+                        title="Error loading workflow"
+                        description={error}
+                        action
+                        onAction={fetchData}
+                        actionLabel="Try Again"
+                    />
+                </Card>
+            </div>
+        );
+    }
 
     if (steps.length === 0) {
         return (
@@ -1752,46 +1860,100 @@ const VisualBuilderTab = ({ workflowId }) => {
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600 dark:text-dark-muted">
-                    Visual representation of your workflow. Steps are nodes, rules are edges.
+                    Visual representation of your workflow. Steps are nodes, rules are edges connecting them.
                 </p>
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                        <span className="text-xs text-gray-600 dark:text-dark-muted">Task</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        <span className="text-xs text-gray-600 dark:text-dark-muted">Approval</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                        <span className="text-xs text-gray-600 dark:text-dark-muted">Notification</span>
-                    </div>
+                    <Button variant="ghost" size="sm" onClick={fetchData}>
+                        <GitBranch className="w-4 h-4 mr-2" />
+                        Refresh
+                    </Button>
                 </div>
             </div>
 
-            <Card className="h-[600px] overflow-hidden">
-                <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onConnect={onConnect}
-                    nodeTypes={nodeTypes}
-                    sensors={sensors}
-                    fitView
-                    attributionPosition="bottom-left"
-                >
-                    <Background />
-                    <Controls />
-                    <MiniMap />
-                </ReactFlow>
+            <div className="flex items-center gap-6 text-sm text-gray-500 dark:text-dark-muted mb-2">
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span>Task</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <span>Approval</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                    <span>Notification</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span>Default Rule</span>
+                </div>
+            </div>
+
+            <Card className="h-[650px] overflow-hidden p-0" noPadding>
+                <div className="h-full w-full">
+                    <ReactFlow
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onConnect={onConnect}
+                        nodeTypes={nodeTypes}
+                        sensors={sensors}
+                        fitView
+                        fitViewOptions={{ padding: 0.2 }}
+                        attributionPosition="bottom-left"
+                        minZoom={0.1}
+                        maxZoom={2}
+                        defaultEdgeOptions={{
+                            type: 'smoothstep',
+                            animated: false,
+                            style: { stroke: '#6b7280', strokeWidth: 1.5 },
+                        }}
+                    >
+                        <Background color="#e5e7eb" gap={20} size={1} />
+                        <Controls
+                            showInteractive={false}
+                            style={{ background: 'white', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}
+                        />
+                        <MiniMap
+                            nodeStrokeWidth={3}
+                            zoomable
+                            pannable
+                            style={{ background: '#f9fafb', borderRadius: '8px' }}
+                        />
+                    </ReactFlow>
+                </div>
             </Card>
 
-            <div className="text-sm text-gray-500 dark:text-dark-muted">
-                <p>• Drag nodes to reposition them</p>
-                <p>• Connect nodes by dragging from one handle to another</p>
-                <p>• Click on edges to edit or delete connections</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-500 dark:text-dark-muted bg-gray-50 dark:bg-dark-card p-4 rounded-lg">
+                <div className="flex items-start gap-2">
+                    <GripVertical className="w-4 h-4 mt-0.5 text-gray-400" />
+                    <span>Drag nodes to reposition them in the workflow</span>
+                </div>
+                <div className="flex items-start gap-2">
+                    <GitBranch className="w-4 h-4 mt-0.5 text-gray-400" />
+                    <span>Connect nodes by dragging from one handle to another</span>
+                </div>
+                <div className="flex items-start gap-2">
+                    <ListOrdered className="w-4 h-4 mt-0.5 text-gray-400" />
+                    <span>Steps display in order (1, 2, 3...) from top to bottom</span>
+                </div>
+            </div>
+
+            {/* Stats Summary */}
+            <div className="grid grid-cols-3 gap-4">
+                <Card className="p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">{steps.length}</div>
+                    <div className="text-sm text-gray-500">Total Steps</div>
+                </Card>
+                <Card className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">{rules.filter(r => r.is_default).length}</div>
+                    <div className="text-sm text-gray-500">Default Rules</div>
+                </Card>
+                <Card className="p-4 text-center">
+                    <div className="text-2xl font-bold text-purple-600">{edges.length}</div>
+                    <div className="text-sm text-gray-500">Connections</div>
+                </Card>
             </div>
         </div>
     );

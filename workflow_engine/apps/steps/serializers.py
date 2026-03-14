@@ -7,6 +7,9 @@ class StepSerializer(serializers.ModelSerializer):
     # Include workflow name for display
     workflow_name = serializers.CharField(source='workflow.name', read_only=True)
     
+    # Explicitly return IDs as strings for visual builder
+    id = serializers.SerializerMethodField()
+    
     class Meta:
         model = Step
         fields = [
@@ -15,6 +18,10 @@ class StepSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_id(self, obj):
+        """Return UUID as string for visual builder"""
+        return str(obj.id)
     
     def to_representation(self, instance):
         """Add workflow UUID to representation"""

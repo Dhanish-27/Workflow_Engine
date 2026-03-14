@@ -6,12 +6,13 @@ const Card = ({
     title,
     subtitle,
     action,
+    noPadding = false,
     ...props
 }) => {
     return (
         <div
             className={cn(
-                'rounded-xl bg-white shadow-sm border border-gray-100 dark:bg-dark-card dark:border-dark-border',
+                'rounded-xl bg-white shadow-sm border border-gray-100 dark:bg-dark-card dark:border-dark-border overflow-hidden',
                 className
             )}
             {...props}
@@ -33,7 +34,10 @@ const Card = ({
                     {action && <div>{action}</div>}
                 </div>
             )}
-            <div className="p-6">
+            <div className={cn(
+                !noPadding && 'p-6',
+                className?.includes('h-') && 'h-full'
+            )}>
                 {children}
             </div>
         </div>
