@@ -20,6 +20,7 @@ from .permissions import (
     CanRetryExecution,
     CanViewApprovalTasks,
 )
+from .engine import get_next_step
 
 
 class ExecutionViewSet(viewsets.ModelViewSet):
@@ -131,21 +132,47 @@ class ExecutionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-        # Determine next approval role for next step (simplified)
-        next_approval_from = None
+        # Get the next step using the workflow engine
+        current_step = execution.current_step
+        next_step = None
+        evaluated_rules = {}
         
-        execution.status = "in_progress"
-        execution.pending_approval_from = next_approval_from
+        if current_step:
+            next_step, evaluated_rules = get_next_step(current_step, execution.data)
+        
+        # Determine next approval role for next step
+        next_approval_from = None
+        if next_step and next_step.step_type == "approval":
+            approval_type = next_step.approval_type
+            if approval_type == "manager_approval":
+                next_approval_from = "manager"
+            elif approval_type == "finance_approval":
+                next_approval_from = "finance"
+            elif approval_type == "ceo_approval":
+                next_approval_from = "ceo"
+            else:
+                next_approval_from = "general"
+        
+        # Update execution with next step or mark as completed
+        if next_step:
+            execution.current_step = next_step
+            execution.status = "pending" if next_approval_from else "in_progress"
+            execution.pending_approval_from = next_approval_from
+        else:
+            # No more steps - mark as completed
+            execution.status = "completed"
+            execution.pending_approval_from = None
+        
         execution.save()
 
         # Create approval log with approver role
         ExecutionLog.objects.create(
             execution=execution,
-            step_name=str(execution.current_step) if execution.current_step else "Approval",
-            step_type="approval",
-            approval_type=execution.current_step.approval_type if execution.current_step else "general",
-            evaluated_rules={},
-            selected_next_step=None,
+            step_name=str(current_step) if current_step else "Approval",
+            step_type=current_step.step_type if current_step else "approval",
+            approval_type=current_step.approval_type if current_step else "general",
+            evaluated_rules=evaluated_rules,
+            selected_next_step=str(next_step) if next_step else None,
             status="approved",
             approver_id=user.id,
             approver_role=user.role,

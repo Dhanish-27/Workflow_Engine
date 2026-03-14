@@ -4,6 +4,8 @@ export { default as Dashboard } from './Dashboard';
 export { default as Users } from './Users';
 export { default as Workflows } from './Workflows';
 export { default as WorkflowConfigure } from './WorkflowConfigure';
+export { default as Steps } from './Steps';
+export { default as Rules } from './Rules';
 export { default as Executions } from './Executions';
 export { default as Approvals } from './Approvals';
 export { default as CreateRequest } from './CreateRequest';

@@ -64,6 +64,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "workflow_engine.urls"
 
+APPEND_SLASH = True
+
 
 # TEMPLATES
 

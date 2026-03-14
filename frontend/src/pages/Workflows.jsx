@@ -39,7 +39,7 @@ const Workflows = () => {
             setValue('version', workflow.version);
             setValue('is_active', workflow.is_active);
         } else {
-            reset({ name: '', description: '', version: '1.0', is_active: true });
+            reset({ name: '', description: '', version: 1, is_active: true });
         }
         setShowModal(true);
     };
@@ -112,7 +112,7 @@ const Workflows = () => {
             accessorKey: 'version',
             header: 'Version',
             cell: ({ row }) => (
-                <Badge variant="default">v{row.original.version}</Badge>
+                <Badge variant="default">v{row.original.version}.0</Badge>
             ),
         },
         {

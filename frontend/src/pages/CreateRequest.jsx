@@ -36,7 +36,7 @@ const CreateRequest = () => {
     };
 
     const handleWorkflowChange = async (workflowId) => {
-        const workflow = workflows.find(w => w.id === parseInt(workflowId));
+        const workflow = workflows.find(w => w.id === workflowId);
         setSelectedWorkflow(workflow);
         setIsFieldsLoading(true);
         setFields([]);

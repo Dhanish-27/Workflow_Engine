@@ -57,39 +57,39 @@ export const usersAPI = {
 
 // Workflows API
 export const workflowsAPI = {
-    list: (params) => api.get('/workflows/', { params }),
-    get: (id) => api.get(`/workflows/${id}/`),
-    create: (data) => api.post('/workflows/', data),
-    update: (id, data) => api.patch(`/workflows/${id}/`, data),
-    delete: (id) => api.delete(`/workflows/${id}/`),
+    list: (params) => api.get('/workflows/workflows/', { params }),
+    get: (id) => api.get(`/workflows/workflows/${id}/`),
+    create: (data) => api.post('/workflows/workflows/', data),
+    update: (id, data) => api.patch(`/workflows/workflows/${id}/`, data),
+    delete: (id) => api.delete(`/workflows/workflows/${id}/`),
 };
 
 // Workflow Fields API
 export const workflowFieldsAPI = {
-    list: (workflowId) => api.get('/workflow-fields/', { params: { workflow: workflowId } }),
-    get: (id) => api.get(`/workflow-fields/${id}/`),
-    create: (data) => api.post('/workflow-fields/', data),
-    update: (id, data) => api.patch(`/workflow-fields/${id}/`, data),
-    delete: (id) => api.delete(`/workflow-fields/${id}/`),
-    reorder: (id, data) => api.post(`/workflow-fields/${id}/reorder/`, data),
+    list: (workflowId) => api.get('/workflows/workflow-fields/', { params: { workflow: workflowId } }),
+    get: (id) => api.get(`/workflows/workflow-fields/${id}/`),
+    create: (data) => api.post('/workflows/workflow-fields/', data),
+    update: (id, data) => api.patch(`/workflows/workflow-fields/${id}/`, data),
+    delete: (id) => api.delete(`/workflows/workflow-fields/${id}/`),
+    reorder: (id, data) => api.post(`/workflows/workflow-fields/${id}/reorder/`, data),
 };
 
 // Steps API
 export const stepsAPI = {
-    list: (params) => api.get('/steps/', { params }),
-    get: (id) => api.get(`/steps/${id}/`),
-    create: (data) => api.post('/steps/', data),
-    update: (id, data) => api.patch(`/steps/${id}/`, data),
-    delete: (id) => api.delete(`/steps/${id}/`),
+    list: (params) => api.get('/steps/steps/', { params }),
+    get: (id) => api.get(`/steps/steps/${id}/`),
+    create: (data) => api.post('/steps/steps/', data),
+    update: (id, data) => api.patch(`/steps/steps/${id}/`, data),
+    delete: (id) => api.delete(`/steps/steps/${id}/`),
 };
 
 // Rules API
 export const rulesAPI = {
-    list: (params) => api.get('/rules/', { params }),
-    get: (id) => api.get(`/rules/${id}/`),
-    create: (data) => api.post('/rules/', data),
-    update: (id, data) => api.patch(`/rules/${id}/`, data),
-    delete: (id) => api.delete(`/rules/${id}/`),
+    list: (params) => api.get('/rules/rules/', { params }),
+    get: (id) => api.get(`/rules/rules/${id}/`),
+    create: (data) => api.post('/rules/rules/', data),
+    update: (id, data) => api.patch(`/rules/rules/${id}/`, data),
+    delete: (id) => api.delete(`/rules/rules/${id}/`),
 };
 
 // Executions API

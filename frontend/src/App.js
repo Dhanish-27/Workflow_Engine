@@ -11,6 +11,8 @@ import {
     Users,
     Workflows,
     WorkflowConfigure,
+    Steps,
+    Rules,
     Executions,
     Approvals,
     CreateRequest,
@@ -79,12 +81,12 @@ function App() {
                     } />
                     <Route path="/steps" element={
                         <PrivateRoute allowedRoles={['admin']}>
-                            <Workflows />
+                            <Steps />
                         </PrivateRoute>
                     } />
                     <Route path="/rules" element={
                         <PrivateRoute allowedRoles={['admin']}>
-                            <Workflows />
+                            <Rules />
                         </PrivateRoute>
                     } />
                     <Route path="/executions" element={

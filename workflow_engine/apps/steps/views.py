@@ -12,6 +12,6 @@ class StepViewSet(ModelViewSet):
 
     serializer_class = StepSerializer
 
-    permission_classes = [CanManageSteps]
+    permission_classes = [IsAuthenticated, CanManageSteps]
 
     filterset_fields = ["workflow"]

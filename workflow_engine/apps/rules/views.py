@@ -12,6 +12,6 @@ class RuleViewSet(ModelViewSet):
 
     serializer_class = RuleSerializer
 
-    permission_classes = [CanManageRules]
+    permission_classes = [IsAuthenticated, CanManageRules]
 
     filterset_fields = ["step"]
