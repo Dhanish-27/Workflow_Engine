@@ -243,7 +243,7 @@ const WorkflowFieldsTab = ({ workflowId }) => {
     const [editingField, setEditingField] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, watch, control, formState: { errors } } = useForm();
 
     const selectedFieldType = watch('field_type');
 
@@ -424,7 +424,8 @@ const WorkflowFieldsTab = ({ workflowId }) => {
 
                     <Controller
                         name="field_type"
-                        control={register('field_type').control}
+                        control={control}
+                        defaultValue="text"
                         render={({ field }) => (
                             <Select
                                 label="Field Type"
@@ -583,7 +584,7 @@ const WorkflowStepsTab = ({ workflowId }) => {
     const [editingStep, setEditingStep] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
+    const { register, handleSubmit, reset, setValue, watch, control, formState: { errors } } = useForm();
 
     const selectedStepType = watch('step_type');
 
@@ -777,7 +778,8 @@ const WorkflowStepsTab = ({ workflowId }) => {
 
                     <Controller
                         name="step_type"
-                        control={register('step_type').control}
+                        control={control}
+                        defaultValue="task"
                         render={({ field }) => (
                             <Select
                                 label="Step Type"
@@ -792,7 +794,8 @@ const WorkflowStepsTab = ({ workflowId }) => {
                     {selectedStepType === 'approval' && (
                         <Controller
                             name="approval_type"
-                            control={register('approval_type').control}
+                            control={control}
+                            defaultValue="general"
                             render={({ field }) => (
                                 <Select
                                     label="Approval Type"
