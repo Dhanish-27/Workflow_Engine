@@ -15,5 +15,5 @@ urlpatterns = [
     # User Management
     path("register/", RegisterUserView.as_view(), name="register-user"),
     path("users/", UserListView.as_view(), name="user-list"),
-    path("users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
+    path("users/<uuid:pk>/", UserDetailView.as_view(), name="user-detail"),
 ]

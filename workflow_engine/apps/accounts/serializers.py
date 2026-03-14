@@ -39,7 +39,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'password', 'password_confirm', 'first_name', 'last_name', 'role', 'department')
+        fields = ('id', 'email', 'password', 'password_confirm', 'first_name', 'last_name', 'role', 'department', 'phone')
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
@@ -48,15 +48,30 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password_confirm')
+        if 'username' not in validated_data:
+            validated_data['username'] = validated_data.get('email')
         user = User.objects.create_user(**validated_data)
         return user
 
 
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, validators=[validate_password])
+
     class Meta:
         model = User
-        fields = ('id', 'email', 'first_name', 'last_name', 'role', 'department', 'is_active', 'created_at')
+        fields = ('id', 'email', 'password', 'first_name', 'last_name', 'role', 'department', 'phone', 'is_active', 'created_at')
         read_only_fields = ('id', 'created_at')
+
+    def update(self, instance, validated_data):
+        email = validated_data.get('email')
+        if email:
+            instance.username = email
+            
+        password = validated_data.pop('password', None)
+        if password:
+            instance.set_password(password)
+            
+        return super().update(instance, validated_data)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -64,8 +79,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'password', 'first_name', 'last_name', 'role', 'department', 'is_active')
+        fields = ('id', 'email', 'password', 'first_name', 'last_name', 'role', 'department', 'phone', 'is_active')
 
     def create(self, validated_data):
+        if 'username' not in validated_data:
+            validated_data['username'] = validated_data.get('email')
         user = User.objects.create_user(**validated_data)
         return user

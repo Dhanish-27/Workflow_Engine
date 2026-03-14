@@ -36,6 +36,7 @@ const Users = () => {
             setValue('email', user.email);
             setValue('role', user.role);
             setValue('department', user.department);
+            setValue('phone', user.phone);
             setValue('is_active', user.is_active);
         } else {
             reset();
@@ -84,9 +85,11 @@ const Users = () => {
     };
 
     const roleOptions = [
-        { value: 'Admin', label: 'Admin' },
-        { value: 'Manager', label: 'Manager' },
-        { value: 'Employee', label: 'Employee' },
+        { value: 'admin', label: 'Admin' },
+        { value: 'ceo', label: 'CEO' },
+        { value: 'finance', label: 'Finance' },
+        { value: 'manager', label: 'Manager' },
+        { value: 'employee', label: 'Employee' },
     ];
 
     const statusOptions = [
@@ -132,6 +135,10 @@ const Users = () => {
         {
             accessorKey: 'department',
             header: 'Department',
+        },
+        {
+            accessorKey: 'phone',
+            header: 'Phone',
         },
         {
             accessorKey: 'is_active',
@@ -250,11 +257,29 @@ const Users = () => {
                         error={errors.department?.message}
                     />
 
+                    <Input
+                        label="Phone Number"
+                        placeholder="Enter phone number"
+                        {...register('phone')}
+                        error={errors.phone?.message}
+                    />
+
                     <Select
                         label="Role"
                         options={roleOptions}
                         {...register('role', { required: 'Role is required' })}
                         error={errors.role?.message}
+                    />
+
+                    <Input
+                        label="Password"
+                        type="password"
+                        placeholder={editingUser ? "Leave blank to keep current password" : "Enter password"}
+                        {...register('password', { 
+                            required: !editingUser ? 'Password is required' : false,
+                            minLength: { value: 8, message: 'Password must be at least 8 characters' }
+                        })}
+                        error={errors.password?.message}
                     />
 
                     {editingUser && (
