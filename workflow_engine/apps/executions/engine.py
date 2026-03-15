@@ -1,42 +1,34 @@
-import ast
-
-
-def evaluate_condition(condition, data):
-
-    try:
-        expression = condition
-
-        for key, value in data.items():
-
-            if isinstance(value, str):
-                value = f"'{value}'"
-
-            expression = expression.replace(key, str(value))
-
-        return eval(expression)
-
-    except Exception:
-        return False
+from apps.rules.models import Rule
 
 
 def get_next_step(step, data):
-
+    """
+    Get the next step based on rule evaluation.
+    
+    Args:
+        step: Step object with related rules
+        data: Dict of field values to evaluate rules against
+        
+    Returns:
+        tuple: (next_step, evaluated_rules) where:
+            - next_step: The next Step object to transition to, or None
+            - evaluated_rules: List of dicts with rule_id and result
+    """
     rules = step.rules.all().order_by("priority")
-
+    
     results = []
-
+    
     for rule in rules:
-
-        if rule.condition == "DEFAULT":
+        # Default rules always match - use as fallback
+        if rule.is_default:
             return rule.next_step, results
-
-        result = evaluate_condition(rule.condition, data)
-
-        results.append(
-            {"rule": rule.condition, "result": result}
-        )
-
-        if result:
+        
+        # Use the safe evaluate method from rules/models.py
+        matches = rule.evaluate(data)
+        results.append({"rule_id": str(rule.id), "result": matches})
+        
+        if matches:
             return rule.next_step, results
-
+    
+    # No rules matched - return None
     return None, results

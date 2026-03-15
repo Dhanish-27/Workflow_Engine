@@ -10,7 +10,7 @@ from datetime import timedelta
 from apps.accounts.models import User
 from apps.workflows.models import Workflow
 from apps.workflows.models import Workflow as WorkflowModel
-from .models import Execution, ExecutionLog
+from .models import Execution, ExecutionLog, StepApproval
 from .serializers import ExecutionSerializer, ExecutionLogSerializer
 from .permissions import (
     CanExecuteWorkflow,
@@ -21,6 +21,18 @@ from .permissions import (
     CanViewApprovalTasks,
 )
 from .engine import get_next_step
+from apps.notifications.services import (
+    notify_approval_required,
+    notify_approved,
+    notify_rejected,
+    notify_completed,
+)
+from apps.emails.services import (
+    send_approval_required_email,
+    send_approved_email,
+    send_rejected_email,
+    send_completed_email,
+)
 
 
 class ExecutionViewSet(viewsets.ModelViewSet):
@@ -99,6 +111,14 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             pending_approval_from=pending_approval_from
         )
 
+        # Send notifications and emails if execution needs approval
+        if execution.status == "pending":
+            try:
+                notify_approval_required(execution)
+                send_approval_required_email(execution)
+            except Exception:
+                pass  # Don't raise exceptions for notifications/emails
+
         serializer = self.get_serializer(execution)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -132,6 +152,15 @@ class ExecutionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
+        # Create StepApproval record
+        StepApproval.objects.create(
+            execution=execution,
+            step=execution.current_step,
+            approved_by=user,
+            action="approve",
+            comment=request.data.get("comment", "")
+        )
+
         # Get the next step using the workflow engine
         current_step = execution.current_step
         next_step = None
@@ -164,6 +193,17 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             execution.pending_approval_from = None
         
         execution.save()
+
+        # Send notifications and emails based on execution status
+        try:
+            if execution.status == "completed":
+                notify_completed(execution)
+                send_completed_email(execution)
+            else:
+                notify_approved(execution, user)
+                send_approved_email(execution, user)
+        except Exception:
+            pass  # Don't raise exceptions for notifications/emails
 
         # Create approval log with approver role
         ExecutionLog.objects.create(
@@ -212,8 +252,25 @@ class ExecutionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
+        # Create StepApproval record
+        StepApproval.objects.create(
+            execution=execution,
+            step=execution.current_step,
+            approved_by=user,
+            action="reject",
+            comment=request.data.get("reason", "")
+        )
+
         execution.status = "failed"
         execution.save()
+
+        # Send rejection notifications and emails
+        try:
+            reason = request.data.get("reason", "")
+            notify_rejected(execution, user)
+            send_rejected_email(execution, user, reason)
+        except Exception:
+            pass  # Don't raise exceptions for notifications/emails
 
         # Create rejection log with approver role
         ExecutionLog.objects.create(

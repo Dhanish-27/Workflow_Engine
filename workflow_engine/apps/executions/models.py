@@ -111,3 +111,46 @@ class ExecutionLog(models.Model):
     started_at = models.DateTimeField()
 
     ended_at = models.DateTimeField()
+
+
+class StepApproval(models.Model):
+    """Tracks approvals for approval steps in workflow executions"""
+    
+    ACTION_CHOICES = (
+        ("approve", "Approve"),
+        ("reject", "Reject"),
+    )
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name="approvals"
+    )
+    
+    step = models.ForeignKey(
+        "steps.Step",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="approvals"
+    )
+    
+    approved_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="approvals"
+    )
+    
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    
+    comment = models.TextField(blank=True, default="")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ["-created_at"]
+    
+    def __str__(self):
+        return f"{self.action} by {self.approved_by} on {self.step}"

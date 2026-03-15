@@ -43,7 +43,7 @@ const CreateRequest = () => {
 
         if (workflowId) {
             try {
-                const response = await workflowFieldsAPI.list(workflowId);
+                const response = await workflowFieldsAPI.list({ workflow: workflowId });
                 setFields(response.data.results || response.data);
             } catch (error) {
                 console.error('Error fetching fields:', error);
