@@ -126,16 +126,14 @@ class Rule(models.Model):
         if actual_value is None:
             return False
         
-        # Convert expected_value to appropriate type
-        try:
-            # Try to convert to number if the actual value is a number
-            if isinstance(actual_value, (int, float)):
-                try:
-                    expected_value = float(expected_value)
-                except (ValueError, TypeError):
-                    pass
-        except Exception:
-            pass
+        # Convert both to float if possible for numeric operators
+        numeric_ops = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte']
+        if operator in numeric_ops:
+            try:
+                actual_value = float(actual_value)
+                expected_value = float(expected_value)
+            except (ValueError, TypeError):
+                pass
         
         # Evaluate based on operator
         switch = {

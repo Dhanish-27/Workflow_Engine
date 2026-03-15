@@ -1,7 +1,7 @@
 import json
 from rest_framework import serializers
 from .models import Rule
-
+from apps.steps.models import Step
 
 class RuleSerializer(serializers.ModelSerializer):
     
@@ -9,9 +9,9 @@ class RuleSerializer(serializers.ModelSerializer):
     next_step_name = serializers.SerializerMethodField()
     step_name = serializers.SerializerMethodField()
     
-    # Explicitly return step and next_step as UUID strings
-    step = serializers.SerializerMethodField()
-    next_step = serializers.SerializerMethodField()
+    # Make step and next_step writable PrimaryKeyRelatedFields
+    step = serializers.PrimaryKeyRelatedField(queryset=Step.objects.all())
+    next_step = serializers.PrimaryKeyRelatedField(queryset=Step.objects.all(), allow_null=True, required=False)
     
     class Meta:
         model = Rule
@@ -22,118 +22,40 @@ class RuleSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
-    def get_step(self, obj):
-        """Return step UUID as string for visual builder"""
-        return str(obj.step_id) if obj.step else None
-    
-    def get_next_step(self, obj):
-        """Return next_step UUID as string for visual builder"""
-        return str(obj.next_step_id) if obj.next_step else None
-    
     def get_next_step_name(self, obj):
         if obj.next_step:
             return obj.next_step.name
         return None
     
     def get_step_name(self, obj):
-        return obj.step.name
+        return obj.step.name if obj.step else None
     
     def validate_condition(self, value):
         """
         Validate and parse the condition field.
-        Accepts either:
-        - JSON string with structured conditions
-        - Dict with structured conditions
         """
         if not value:
             return json.dumps({"conditions": [], "logical_operator": "AND"})
         
-        # If it's already a dict, convert to JSON
         if isinstance(value, dict):
-            # Validate the structure
-            conditions = value.get("conditions", [])
-            logical_operator = value.get("logical_operator", "AND")
-            
-            # Validate each condition
-            for cond in conditions:
-                if not isinstance(cond, dict):
-                    raise serializers.ValidationError("Each condition must be a dictionary")
-                
-                if not cond.get("field"):
-                    raise serializers.ValidationError("Each condition must have a 'field'")
-                
-                if not cond.get("operator"):
-                    raise serializers.ValidationError("Each condition must have an 'operator'")
-            
-            # Validate logical operator
-            if logical_operator not in ["AND", "OR"]:
-                raise serializers.ValidationError("Logical operator must be 'AND' or 'OR'")
-            
             return json.dumps(value)
         
-        # If it's a string, try to parse and validate
         if isinstance(value, str):
             try:
-                parsed = json.loads(value)
-                
-                # Validate the structure
-                conditions = parsed.get("conditions", [])
-                logical_operator = parsed.get("logical_operator", "AND")
-                
-                # Validate each condition
-                for cond in conditions:
-                    if not isinstance(cond, dict):
-                        raise serializers.ValidationError("Each condition must be a dictionary")
-                    
-                    if not cond.get("field"):
-                        raise serializers.ValidationError("Each condition must have a 'field'")
-                    
-                    if not cond.get("operator"):
-                        raise serializers.ValidationError("Each condition must have an 'operator'")
-                
-                # Validate logical operator
-                if logical_operator not in ["AND", "OR"]:
-                    raise serializers.ValidationError("Logical operator must be 'AND' or 'OR'")
-                
+                json.loads(value)
                 return value
             except json.JSONDecodeError:
-                # If it's not valid JSON, wrap it as a simple condition
-                # This is for backward compatibility with old plain text conditions
                 return json.dumps({
                     "conditions": [{"field": value, "operator": "contains", "value": ""}],
                     "logical_operator": "AND"
                 })
         
-        raise serializers.ValidationError("Condition must be a valid JSON string or object")
+        return value
     
     def validate(self, attrs):
         """
         Validate the entire rule.
         """
-        is_default = attrs.get('is_default', False)
-        next_step = attrs.get('next_step')
-        condition = attrs.get('condition')
-        
-        # Validate default rule constraints
-        if is_default:
-            # Default rules should not have conditions (conditions array should be empty)
-            if condition:
-                try:
-                    parsed = json.loads(condition) if isinstance(condition, str) else condition
-                    conditions = parsed.get("conditions", [])
-                    if conditions:
-                        raise serializers.ValidationError({
-                            'condition': 'Default rule cannot have conditions'
-                        })
-                except:
-                    pass
-            
-            # Default rules don't need a next_step
-            # But if there's no next_step, the workflow will end
-        else:
-            # Non-default rules can have a null next_step, which ends the workflow
-            pass
-        
         return attrs
     
     def create(self, validated_data):
@@ -144,7 +66,6 @@ class RuleSerializer(serializers.ModelSerializer):
         step = validated_data.get('step')
         
         if not name:
-            # Count existing rules for this step
             count = Rule.objects.filter(step=step).count() + 1
             validated_data['name'] = f"Rule {count}"
         

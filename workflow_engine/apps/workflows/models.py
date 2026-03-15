@@ -29,6 +29,10 @@ class Workflow(models.Model):
     def __str__(self):
         return self.name
 
+    def clean(self):
+        from .validators import validate_workflow
+        validate_workflow(self)
+
 
 class WorkflowField(models.Model):
 

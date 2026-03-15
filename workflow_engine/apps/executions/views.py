@@ -20,7 +20,7 @@ from .permissions import (
     CanRetryExecution,
     CanViewApprovalTasks,
 )
-from .engine import get_next_step
+from .engine import get_next_step, process_execution
 from apps.notifications.services import (
     notify_approval_required,
     notify_approved,
@@ -88,36 +88,17 @@ class ExecutionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Determine pending approval based on first approval step
-        pending_approval_from = None
-        if workflow.start_step and workflow.start_step.step_type == "approval":
-            approval_type = workflow.start_step.approval_type
-            if approval_type == "manager_approval":
-                pending_approval_from = "manager"
-            elif approval_type == "finance_approval":
-                pending_approval_from = "finance"
-            elif approval_type == "ceo_approval":
-                pending_approval_from = "ceo"
-            else:
-                pending_approval_from = "general"
-
         execution = Execution.objects.create(
             workflow=workflow,
             workflow_version=workflow.version,
-            status="in_progress" if not pending_approval_from else "pending",
+            status="in_progress",
             data=request.data.get("data", {}),
             current_step=workflow.start_step,
-            triggered_by=request.user,
-            pending_approval_from=pending_approval_from
+            triggered_by=request.user
         )
 
-        # Send notifications and emails if execution needs approval
-        if execution.status == "pending":
-            try:
-                notify_approval_required(execution)
-                send_approval_required_email(execution)
-            except Exception:
-                pass  # Don't raise exceptions for notifications/emails
+        # Process the execution (this will handle automatic tasks and move to first approval or end)
+        process_execution(execution)
 
         serializer = self.get_serializer(execution)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -161,54 +142,26 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             comment=request.data.get("comment", "")
         )
 
-        # Get the next step using the workflow engine
+        # Get the next step using the workflow engine before we notify
         current_step = execution.current_step
-        next_step = None
-        evaluated_rules = {}
+        if not current_step:
+            return Response(
+                {"error": "No current step to approve"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        next_step, evaluated_rules = get_next_step(current_step, execution.data)
         
-        if current_step:
-            next_step, evaluated_rules = get_next_step(current_step, execution.data)
-        
-        # Determine next approval role for next step
-        next_approval_from = None
-        if next_step and next_step.step_type == "approval":
-            approval_type = next_step.approval_type
-            if approval_type == "manager_approval":
-                next_approval_from = "manager"
-            elif approval_type == "finance_approval":
-                next_approval_from = "finance"
-            elif approval_type == "ceo_approval":
-                next_approval_from = "ceo"
-            else:
-                next_approval_from = "general"
-        
-        # Update execution with next step or mark as completed
-        if next_step:
-            execution.current_step = next_step
-            execution.status = "pending" if next_approval_from else "in_progress"
-            execution.pending_approval_from = next_approval_from
-        else:
-            # No more steps - mark as completed
-            execution.status = "completed"
-            execution.pending_approval_from = None
-        
-        execution.save()
-
-        # Send notifications and emails based on execution status
+        # Notify requester that THIS step was approved
         try:
-            if execution.status == "completed":
-                notify_completed(execution)
-                send_completed_email(execution)
-            else:
-                notify_approved(execution, user)
-                send_approved_email(execution, user)
+            notify_approved(execution, user)
+            send_approved_email(execution, user)
         except Exception:
-            pass  # Don't raise exceptions for notifications/emails
+            pass
 
-        # Create approval log with approver role
+        # Log the approval
         ExecutionLog.objects.create(
             execution=execution,
-            step_name=str(current_step) if current_step else "Approval",
+            step_name=str(current_step),
             step_type=current_step.step_type if current_step else "approval",
             approval_type=current_step.approval_type if current_step else "general",
             evaluated_rules=evaluated_rules,
@@ -220,7 +173,13 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             ended_at=timezone.now()
         )
 
-        return Response({"status": "approved", "execution_id": str(execution.id)})
+        # Move to next step and continue automatic processing
+        execution.current_step = next_step
+        execution.save()
+        
+        process_execution(execution)
+
+        return Response({"status": execution.status, "execution_id": str(execution.id)})
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
@@ -399,28 +358,17 @@ class StartExecution(APIView):
 
         workflow = Workflow.objects.get(id=workflow_id)
 
-        # Determine pending approval based on first approval step
-        pending_approval_from = None
-        if workflow.start_step and workflow.start_step.step_type == "approval":
-            approval_type = workflow.start_step.approval_type
-            if approval_type == "manager_approval":
-                pending_approval_from = "manager"
-            elif approval_type == "finance_approval":
-                pending_approval_from = "finance"
-            elif approval_type == "ceo_approval":
-                pending_approval_from = "ceo"
-            else:
-                pending_approval_from = "general"
-
         execution = Execution.objects.create(
             workflow=workflow,
             workflow_version=workflow.version,
-            status="in_progress" if not pending_approval_from else "pending",
+            status="in_progress",
             data=request.data,
             current_step=workflow.start_step,
-            triggered_by=request.user,
-            pending_approval_from=pending_approval_from
+            triggered_by=request.user
         )
+
+        # Process the execution
+        process_execution(execution)
 
         return Response({"execution_id": str(execution.id)})
 
