@@ -1,15 +1,16 @@
 from pathlib import Path
 import os
+from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 # SECURITY
-SECRET_KEY = "django-insecure-change-this-secret-key"
+SECRET_KEY = config("SECRET_KEY", default="django-insecure-change-this-secret-key")
 
-DEBUG = True
+DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
 
 
 # APPLICATIONS
@@ -247,7 +248,15 @@ LOGGING = {
 
 # EMAIL SETTINGS (for notification steps)
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+
+# Other common email settings
+EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@workflow.com")
 
 
 # CUSTOM WORKFLOW SETTINGS

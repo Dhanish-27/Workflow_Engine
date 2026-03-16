@@ -7,13 +7,9 @@ User = get_user_model()
 
 logger = logging.getLogger(__name__)
 
-# Default from email if not configured in settings
-DEFAULT_FROM_EMAIL = "noreply@workflow.com"
-
-
 def get_from_email():
     """Get the default from email address."""
-    return getattr(settings, 'DEFAULT_FROM_EMAIL', DEFAULT_FROM_EMAIL)
+    return settings.DEFAULT_FROM_EMAIL
 
 
 def send_workflow_email(user, subject, message):
