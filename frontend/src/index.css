@@ -4,7 +4,7 @@
 
 @layer base {
     body {
-        @apply bg-gray-50 text-gray-900 dark:bg-dark-bg dark:text-dark-text font-sans;
+        @apply bg-white text-black dark:bg-black dark:text-white font-sans;
         @apply transition-colors duration-300;
     }
 
@@ -22,36 +22,36 @@
     }
 
     .btn-primary {
-        @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+        @apply btn bg-black text-white hover:bg-neutral-800 focus:ring-neutral-500 dark:bg-white dark:text-black dark:hover:bg-neutral-200 dark:focus:ring-neutral-400;
     }
 
     .btn-secondary {
-        @apply btn bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 dark:bg-dark-card dark:text-dark-text dark:hover:bg-dark-border;
+        @apply btn bg-neutral-100 text-black hover:bg-neutral-200 focus:ring-neutral-400 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800 dark:focus:ring-neutral-600;
     }
 
     .btn-danger {
-        @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+        @apply btn bg-neutral-900 text-white hover:bg-black focus:ring-neutral-700 dark:bg-neutral-100 dark:text-black dark:hover:bg-white dark:focus:ring-neutral-300;
     }
 
     .btn-ghost {
-        @apply btn bg-transparent hover:bg-gray-100 dark:hover:bg-dark-card text-gray-700 dark:text-dark-text;
+        @apply btn bg-transparent hover:bg-neutral-50 dark:hover:bg-neutral-950 text-black dark:text-white;
     }
 
     .card {
-        @apply rounded-xl bg-white shadow-sm border border-gray-100 dark:bg-dark-card dark:border-dark-border;
+        @apply rounded-xl bg-white shadow-sm border border-neutral-200 dark:bg-black dark:border-neutral-800;
     }
 
     /* Glassmorphism utilities */
     .glass {
-        @apply bg-white/80 dark:bg-dark-card/80 backdrop-blur-md;
+        @apply bg-white/70 dark:bg-black/70 backdrop-blur-md border border-white/20 dark:border-white/10;
     }
 
     .glass-light {
-        @apply bg-white/60 backdrop-blur-sm;
+        @apply bg-white/40 backdrop-blur-sm border border-white/20;
     }
 
     .glass-dark {
-        @apply bg-dark-card/70 backdrop-blur-md;
+        @apply bg-black/60 backdrop-blur-md border border-white/5;
     }
 
     /* Hover transition utilities */
@@ -60,20 +60,20 @@
     }
 
     .hover-scale {
-        @apply transition-transform duration-200 ease-out hover:scale-105;
+        @apply transition-transform duration-200 ease-out hover:scale-[1.02];
     }
 
     .hover-glow {
-        @apply transition-shadow duration-200 ease-out hover:shadow-lg;
+        @apply transition-shadow duration-200 ease-out hover:shadow-md;
     }
 
     /* Focus ring animation */
     .focus-ring {
-        @apply focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2;
+        @apply focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2;
     }
 
     .focus-ring-dark {
-        @apply focus:outline-none focus:ring-2 focus:ring-primary-400/50 focus:ring-offset-dark-bg;
+        @apply focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:ring-offset-black;
     }
 }
 
@@ -84,25 +84,25 @@
 }
 
 ::-webkit-scrollbar-track {
-    @apply bg-gray-100 dark:bg-dark-bg;
+    @apply bg-neutral-50 dark:bg-black;
 }
 
 ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 dark:bg-dark-border rounded-full;
+    @apply bg-neutral-300 dark:bg-neutral-800 rounded-full;
     transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400 dark:bg-dark-muted;
+    @apply bg-neutral-400 dark:bg-neutral-700;
 }
 
 /* Enhanced dark mode scrollbar */
 .dark ::-webkit-scrollbar-thumb {
-    background: #334155;
+    background: #262626;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-    background: #475569;
+    background: #404040;
 }
 
 /* React Flow customization */
@@ -111,7 +111,7 @@
 }
 
 .react-flow__edge-path {
-    @apply stroke-gray-400;
+    @apply stroke-neutral-400 dark:stroke-neutral-600;
 }
 
 .react-flow__controls {
@@ -250,17 +250,29 @@
 }
 
 /* Focus animation */
+/* Focus animation (handled below with CSS variables) */
+
+/* For dark mode, we'll use a different class or rely on the same animation but it might be less visible. 
+   Actually, it's better to just have one focusPulse that looks okay in both or use a variable. */
+:root {
+    --focus-ring-color: rgba(0, 0, 0, 0.2);
+}
+
+.dark {
+    --focus-ring-color: rgba(255, 255, 255, 0.2);
+}
+
 @keyframes focusPulse {
     0% {
-        box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4);
+        box-shadow: 0 0 0 0 var(--focus-ring-color);
     }
 
     70% {
-        box-shadow: 0 0 0 6px rgba(14, 165, 233, 0);
+        box-shadow: 0 0 0 6px rgba(0, 0, 0, 0);
     }
 
     100% {
-        box-shadow: 0 0 0 0 rgba(14, 165, 233, 0);
+        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
     }
 }
 

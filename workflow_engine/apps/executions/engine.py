@@ -60,10 +60,16 @@ def process_execution(execution):
     # If no current step, try to initialize from workflow start step
     if not execution.current_step:
         if execution.status == "in_progress":
-            execution.current_step = execution.workflow.start_step
-            if not execution.current_step:
+            start_step = execution.workflow.start_step
+            # Fallback if start_step is not explicitly set
+            if not start_step:
+                start_step = execution.workflow.steps.order_by('order').first()
+            
+            if not start_step:
                 # If still no step, we can't proceed
                 return
+            
+            execution.current_step = start_step
             execution.save()
         elif execution.status == "pending":
             # If status is pending but no current step, it means we probably just approved the last step

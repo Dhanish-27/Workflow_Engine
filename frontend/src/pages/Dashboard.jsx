@@ -32,6 +32,7 @@ const Dashboard = () => {
         totalUsers: 0,
         totalWorkflows: 0,
         runningExecutions: 0,
+        pendingExecutions: 0,
         completedExecutions: 0,
         failedExecutions: 0,
     });
@@ -63,6 +64,7 @@ const Dashboard = () => {
                 totalUsers: statsData.total_users,
                 totalWorkflows: statsData.total_workflows,
                 runningExecutions: statsData.running_executions,
+                pendingExecutions: statsData.pending_executions,
                 completedExecutions: statsData.completed_executions,
                 failedExecutions: statsData.failed_executions,
             });
@@ -77,12 +79,14 @@ const Dashboard = () => {
                 const executions = response.data.results || response.data;
 
                 const running = executions.filter(e => e.status === 'running' || e.status === 'in_progress').length;
+                const pending = executions.filter(e => e.status === 'pending').length;
                 const completed = executions.filter(e => e.status === 'completed').length;
                 const failed = executions.filter(e => e.status === 'failed').length;
 
                 setStats(prev => ({
                     ...prev,
                     runningExecutions: running,
+                    pendingExecutions: pending,
                     completedExecutions: completed,
                     failedExecutions: failed,
                 }));
@@ -118,6 +122,13 @@ const Dashboard = () => {
             path: '/executions'
         },
         {
+            title: 'Pending',
+            value: stats.pendingExecutions,
+            icon: Clock,
+            color: 'bg-blue-500',
+            path: '/executions'
+        },
+        {
             title: 'Completed',
             value: stats.completedExecutions,
             icon: CheckCircle,
@@ -136,10 +147,11 @@ const Dashboard = () => {
     const pieData = [
         { name: 'Completed', value: stats.completedExecutions, color: '#10B981' },
         { name: 'Running', value: stats.runningExecutions, color: '#F59E0B' },
+        { name: 'Pending', value: stats.pendingExecutions, color: '#3B82F6' },
         { name: 'Failed', value: stats.failedExecutions, color: '#EF4444' },
     ];
 
-    const COLORS = ['#10B981', '#F59E0B', '#EF4444'];
+    const COLORS = ['#10B981', '#F59E0B', '#3B82F6', '#EF4444'];
 
     if (role === 'employee') {
         return <EmployeeDashboard />;
@@ -161,7 +173,7 @@ const Dashboard = () => {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 {statCards.map((stat) => (
                     <Card
                         key={stat.title}
