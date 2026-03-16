@@ -99,41 +99,70 @@ export const useAuthStore = create(
     )
 );
 
+// Helper to get initial dark mode from localStorage
+const getInitialDarkMode = () => {
+    try {
+        const stored = localStorage.getItem('ui-storage');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.state?.darkMode) {
+                document.documentElement.classList.add('dark');
+                return true;
+            }
+        }
+    } catch (e) {
+        console.error('Error reading dark mode from localStorage:', e);
+    }
+    return false;
+};
+
+const initialDarkMode = getInitialDarkMode();
+
 // UI Store
-export const useUIStore = create((set) => ({
-    sidebarOpen: true,
-    darkMode: false,
-    notifications: [],
+export const useUIStore = create(
+    persist(
+        (set) => ({
+            sidebarOpen: true,
+            darkMode: initialDarkMode,
+            notifications: [],
 
-    toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-    setSidebarOpen: (open) => set({ sidebarOpen: open }),
+            toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+            setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-    toggleDarkMode: () => set((state) => {
-        const newDarkMode = !state.darkMode;
-        if (newDarkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
+            toggleDarkMode: () => set((state) => {
+                const newDarkMode = !state.darkMode;
+                if (newDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                return { darkMode: newDarkMode };
+            }),
+
+            setDarkMode: (darkMode) => {
+                if (darkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                set({ darkMode });
+            },
+
+            addNotification: (notification) => set((state) => ({
+                notifications: [...state.notifications, { ...notification, id: Date.now() }],
+            })),
+
+            removeNotification: (id) => set((state) => ({
+                notifications: state.notifications.filter((n) => n.id !== id),
+            })),
+
+            clearNotifications: () => set({ notifications: [] }),
+        }),
+        {
+            name: 'ui-storage',
+            partialize: (state) => ({
+                darkMode: state.darkMode,
+            }),
         }
-        return { darkMode: newDarkMode };
-    }),
-
-    setDarkMode: (darkMode) => {
-        if (darkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-        set({ darkMode });
-    },
-
-    addNotification: (notification) => set((state) => ({
-        notifications: [...state.notifications, { ...notification, id: Date.now() }],
-    })),
-
-    removeNotification: (id) => set((state) => ({
-        notifications: state.notifications.filter((n) => n.id !== id),
-    })),
-
-    clearNotifications: () => set({ notifications: [] }),
-}));
+    )
+);

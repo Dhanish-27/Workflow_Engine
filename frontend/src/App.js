@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { useAuthStore, useUIStore } from './store';
+import { useAuthStore } from './store';
 import { MainLayout } from './components/layout';
 import PrivateRoute from './components/PrivateRoute';
 import {
@@ -18,19 +18,11 @@ import {
     Approvals,
     CreateRequest,
     MyRequests,
+    Notifications,
 } from './pages';
 
 function App() {
     const { isAuthenticated, user } = useAuthStore();
-    const { darkMode } = useUIStore();
-
-    useEffect(() => {
-        if (darkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [darkMode]);
 
     // Get the initial redirect path based on role
     const getDefaultPath = () => {
@@ -115,6 +107,13 @@ function App() {
                     <Route path="/my-requests" element={
                         <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'ceo', 'finance']}>
                             <MyRequests />
+                        </PrivateRoute>
+                    } />
+
+                    {/* Notifications - All authenticated users */}
+                    <Route path="/notifications" element={
+                        <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'ceo', 'finance']}>
+                            <Notifications />
                         </PrivateRoute>
                     } />
                 </Route>

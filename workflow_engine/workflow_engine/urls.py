@@ -13,6 +13,9 @@ urlpatterns = [
     # Accounts
     path("api/accounts/", include("apps.accounts.urls")),
 
+    # Notifications
+    path("api/notifications/", include("apps.notifications.urls")),
+
     # Workflow Engine
     path("api/workflows/", include("apps.workflows.urls")),
     path("api/steps/", include("apps.steps.urls")),
