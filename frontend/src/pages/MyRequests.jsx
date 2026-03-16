@@ -114,9 +114,13 @@ const MyRequests = () => {
             ),
         },
         {
-            accessorKey: 'current_step',
-            header: 'Current Step',
-            cell: ({ row }) => row.original.current_step || '-',
+            accessorKey: 'status_display',
+            header: 'Current Status',
+            cell: ({ row }) => (
+                <span className="text-gray-700 dark:text-dark-text font-medium">
+                    {row.original.status_display || row.original.current_step_name || row.original.current_step || '-'}
+                </span>
+            ),
         },
         {
             accessorKey: 'created_at',
@@ -198,9 +202,9 @@ const MyRequests = () => {
                                 </Badge>
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500 dark:text-dark-muted">Current Step</p>
+                                <p className="text-sm text-gray-500 dark:text-dark-muted">Current Status</p>
                                 <p className="font-medium text-gray-900 dark:text-dark-text">
-                                    {selectedExecution.current_step || '-'}
+                                    {selectedExecution.status_display || selectedExecution.current_step_name || selectedExecution.current_step || '-'}
                                 </p>
                             </div>
                             <div>

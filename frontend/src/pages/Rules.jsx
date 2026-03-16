@@ -531,19 +531,27 @@ const Rules = () => {
         const newRules = [...rules];
         [newRules[currentIndex], newRules[newIndex]] = [newRules[newIndex], newRules[currentIndex]];
 
-        const updatedRules = newRules.map((r, idx) => ({
-            ...r,
+        const updatedRulesPayload = newRules.map((r, idx) => ({
+            id: r.id,
             priority: idx + 1
         }));
 
-        setRules(updatedRules);
+        // Optimistically update UI
+        setRules(newRules.map((r, idx) => ({ ...r, priority: idx + 1 })));
 
         try {
-            await rulesAPI.update(rule.id, { priority: direction === 'up' ? rule.priority - 1 : rule.priority + 1 });
+            await rulesAPI.reorder({ rules: updatedRulesPayload });
             fetchRules();
         } catch (error) {
             console.error('Error updating priority:', error);
-            fetchRules();
+            // Fallback for older API versions or errors
+            try {
+                await rulesAPI.update(rule.id, { priority: direction === 'up' ? rule.priority - 1 : rule.priority + 1 });
+                fetchRules();
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError);
+                fetchRules();
+            }
         }
     };
 

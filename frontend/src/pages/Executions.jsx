@@ -78,9 +78,13 @@ const Executions = () => {
             ),
         },
         {
-            accessorKey: 'current_step',
-            header: 'Current Step',
-            cell: ({ row }) => row.original.current_step || '-',
+            accessorKey: 'status_display',
+            header: 'Current Status',
+            cell: ({ row }) => (
+                <span className="text-gray-700 dark:text-dark-text font-medium">
+                    {row.original.status_display || row.original.current_step_name || row.original.current_step || '-'}
+                </span>
+            ),
         },
         {
             accessorKey: 'triggered_by_name',

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Execution, ExecutionLog
+from .models import Execution, ExecutionLog, StepApproval
 
 
 class ExecutionLogSerializer(serializers.ModelSerializer):
@@ -18,6 +18,8 @@ class ExecutionSerializer(serializers.ModelSerializer):
     triggered_by_email = serializers.SerializerMethodField()
     logs = ExecutionLogSerializer(many=True, read_only=True)
     timeline = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    pending_approval_role = serializers.SerializerMethodField()
 
     class Meta:
         model = Execution
@@ -40,6 +42,8 @@ class ExecutionSerializer(serializers.ModelSerializer):
             "ended_at",
             "logs",
             "timeline",
+            "status_display",
+            "pending_approval_role",
         ]
         read_only_fields = [
             "id",
@@ -85,3 +89,27 @@ class ExecutionSerializer(serializers.ModelSerializer):
             })
             
         return timeline
+
+    def get_status_display(self, obj):
+        """Returns a detailed human-readable status"""
+        if obj.status == 'completed':
+            return "Workflow Completed"
+        if obj.status == 'failed':
+            return "Workflow Failed"
+        if obj.status == 'canceled':
+            return "Workflow Canceled"
+            
+        if obj.status == 'pending' and obj.current_step:
+            role = obj.get_pending_approval_from_display() or obj.pending_approval_from
+            return f"Current step - {obj.current_step.name} (Pending for {role} Approval)"
+            
+        if obj.status == 'in_progress' and obj.current_step:
+            return f"Processing - {obj.current_step.name}"
+            
+        return obj.get_status_display()
+
+    def get_pending_approval_role(self, obj):
+        """Returns the role name that needs to approve"""
+        if obj.status == 'pending':
+            return obj.get_pending_approval_from_display() or obj.pending_approval_from
+        return None

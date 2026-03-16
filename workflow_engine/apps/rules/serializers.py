@@ -1,13 +1,33 @@
 import json
 from rest_framework import serializers
-from .models import Rule
+from .models import Rule, RuleCondition
 from apps.steps.models import Step
 
+
+class RuleConditionSerializer(serializers.ModelSerializer):
+    """Serializer for RuleCondition model"""
+    
+    class Meta:
+        model = RuleCondition
+        fields = ['id', 'field_name', 'operator', 'value', 'order']
+        read_only_fields = ['id']
+    
+    def validate_value(self, value):
+        """Ensure value is valid JSON"""
+        if value is None:
+            return {}
+        return value
+
+
 class RuleSerializer(serializers.ModelSerializer):
+    """Serializer for Rule model with nested conditions"""
     
     # Add readable field for next_step name
     next_step_name = serializers.SerializerMethodField()
     step_name = serializers.SerializerMethodField()
+    
+    # Nested conditions
+    conditions = RuleConditionSerializer(many=True, required=False)
     
     # Make step and next_step writable PrimaryKeyRelatedFields
     step = serializers.PrimaryKeyRelatedField(queryset=Step.objects.all())
@@ -16,9 +36,9 @@ class RuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rule
         fields = [
-            'id', 'name', 'step', 'step_name', 'condition', 
+            'id', 'name', 'step', 'step_name', 'condition', 'logical_operator',
             'next_step', 'next_step_name', 'priority', 
-            'is_default', 'created_at', 'updated_at'
+            'is_default', 'created_at', 'updated_at', 'conditions'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
@@ -32,7 +52,7 @@ class RuleSerializer(serializers.ModelSerializer):
     
     def validate_condition(self, value):
         """
-        Validate and parse the condition field.
+        Validate and parse the condition field (legacy support).
         """
         if not value:
             return json.dumps({"conditions": [], "logical_operator": "AND"})
@@ -58,10 +78,46 @@ class RuleSerializer(serializers.ModelSerializer):
         """
         return attrs
     
+    def _get_default_rule_exclusion(self):
+        """Get the pk to exclude when checking for default rule"""
+        if self.instance:
+            return self.instance.pk
+        return None
+    
+    def validate_is_default(self, value):
+        """
+        Validate that only one default rule per step exists.
+        """
+        if value:
+            step = self.initial_data.get('step') or (self.instance.step if self.instance else None)
+            if step:
+                queryset = Rule.objects.filter(step=step, is_default=True)
+                exclude_pk = self._get_default_rule_exclusion()
+                if exclude_pk:
+                    queryset = queryset.exclude(pk=exclude_pk)
+                if queryset.exists():
+                    raise serializers.ValidationError("Only one default rule is allowed per step.")
+        return value
+    
+    def validate_priority(self, value):
+        """
+        Validate that priority is unique per step.
+        """
+        step = self.initial_data.get('step') or (self.instance.step if self.instance else None)
+        if step:
+            queryset = Rule.objects.filter(step=step, priority=value)
+            exclude_pk = self._get_default_rule_exclusion()
+            if exclude_pk:
+                queryset = queryset.exclude(pk=exclude_pk)
+            if queryset.exists():
+                raise serializers.ValidationError("Priority must be unique per step.")
+        return value
+    
     def create(self, validated_data):
         """
-        Create a new rule with auto-generated name if not provided.
+        Create a new rule with nested conditions.
         """
+        conditions_data = validated_data.pop('conditions', [])
         name = validated_data.get('name')
         step = validated_data.get('step')
         
@@ -69,10 +125,58 @@ class RuleSerializer(serializers.ModelSerializer):
             count = Rule.objects.filter(step=step).count() + 1
             validated_data['name'] = f"Rule {count}"
         
-        return super().create(validated_data)
+        rule = super().create(validated_data)
+        
+        # Create nested conditions
+        for idx, condition_data in enumerate(conditions_data):
+            condition_data['order'] = condition_data.get('order', idx)
+            RuleCondition.objects.create(rule=rule, **condition_data)
+        
+        return rule
     
     def update(self, instance, validated_data):
         """
-        Update an existing rule.
+        Update an existing rule with nested conditions.
         """
-        return super().update(instance, validated_data)
+        conditions_data = validated_data.pop('conditions', None)
+        
+        rule = super().update(instance, validated_data)
+        
+        # Update nested conditions if provided
+        if conditions_data is not None:
+            # Remove existing conditions
+            rule.conditions.all().delete()
+            
+            # Create new conditions
+            for idx, condition_data in enumerate(conditions_data):
+                condition_data['order'] = condition_data.get('order', idx)
+                RuleCondition.objects.create(rule=rule, **condition_data)
+        
+        return rule
+
+
+class RuleListSerializer(serializers.ModelSerializer):
+    """Serializer for listing rules with condition count"""
+    
+    next_step_name = serializers.SerializerMethodField()
+    step_name = serializers.SerializerMethodField()
+    condition_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Rule
+        fields = [
+            'id', 'name', 'step', 'step_name', 'priority', 
+            'is_default', 'next_step', 'next_step_name', 
+            'condition_count', 'logical_operator'
+        ]
+    
+    def get_next_step_name(self, obj):
+        if obj.next_step:
+            return obj.next_step.name
+        return None
+    
+    def get_step_name(self, obj):
+        return obj.step.name if obj.step else None
+    
+    def get_condition_count(self, obj):
+        return obj.conditions.count()

@@ -32,12 +32,13 @@ def get_next_step(step, data):
     rules = step.rules.all().order_by("priority")
     
     results = []
+    default_rule = None
     
     for rule in rules:
-        # Default rules always match - use as fallback
         if rule.is_default:
-            return rule.next_step, results
-        
+            default_rule = rule
+            continue
+            
         # Use the safe evaluate method from rules/models.py
         matches = rule.evaluate(data)
         results.append({"rule_id": str(rule.id), "result": matches})
@@ -45,8 +46,15 @@ def get_next_step(step, data):
         if matches:
             return rule.next_step, results
     
-    # No rules matched - return None
-    return None, results
+    # If no rules matched, use default rule if it exists
+    if default_rule:
+        return default_rule.next_step, results
+        
+    # No rules matched and no default rule - fall back to sequential execution
+    # Get the next step in the workflow based on the 'order' field
+    next_step = step.workflow.steps.filter(order__gt=step.order).first()
+    
+    return next_step, results
 
 
 def process_execution(execution):

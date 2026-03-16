@@ -91,6 +91,7 @@ export const rulesAPI = {
     create: (data) => api.post('/rules/rules/', data),
     update: (id, data) => api.patch(`/rules/rules/${id}/`, data),
     delete: (id) => api.delete(`/rules/rules/${id}/`),
+    reorder: (data) => api.post(`/rules/rules/reorder/`, data),
 };
 
 // Executions API

@@ -1,10 +1,71 @@
 import uuid
 import json
 from django.db import models
+from django.core.exceptions import ValidationError
+
+
+class RuleCondition(models.Model):
+    """
+    Model to store individual conditions for a rule.
+    Supports multiple conditions per rule with AND/OR logical operators.
+    """
+    
+    OPERATORS = (
+        ('gt', 'Greater Than'),
+        ('lt', 'Less Than'),
+        ('gte', 'Greater Than or Equal'),
+        ('lte', 'Less Than or Equal'),
+        ('eq', 'Equal'),
+        ('neq', 'Not Equal'),
+        ('equals', 'Equals (case-insensitive)'),
+        ('not_equals', 'Not Equals (case-insensitive)'),
+        ('contains', 'Contains'),
+        ('starts_with', 'Starts With'),
+        ('ends_with', 'Ends With'),
+        ('is_true', 'Is True'),
+        ('is_false', 'Is False'),
+        ('before', 'Before'),
+        ('after', 'After'),
+    )
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    rule = models.ForeignKey(
+        'rules.Rule',
+        on_delete=models.CASCADE,
+        related_name='conditions'
+    )
+    
+    field_name = models.CharField(max_length=255, help_text='Field name to evaluate')
+    
+    operator = models.CharField(
+        max_length=20,
+        choices=OPERATORS,
+        help_text='Comparison operator'
+    )
+    
+    value = models.JSONField(help_text='Expected value for comparison')
+    
+    order = models.IntegerField(default=0, help_text='Order of condition within the rule')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return f"{self.field_name} {self.operator} {self.value}"
 
 
 class Rule(models.Model):
-
+    
+    LOGICAL_OPERATORS = (
+        ('AND', 'AND'),
+        ('OR', 'OR'),
+    )
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     name = models.CharField(max_length=255, blank=True, default="")
@@ -15,9 +76,17 @@ class Rule(models.Model):
         related_name="rules"
     )
 
-    # Store conditions as JSON string
+    # Store conditions as JSON string (legacy support)
     # Format: {"conditions": [{"field": "amount", "operator": ">", "value": 1000}], "logical_operator": "AND"}
-    condition = models.TextField()
+    condition = models.TextField(blank=True, default='')
+    
+    # New field for logical operator (AND/OR)
+    logical_operator = models.CharField(
+        max_length=3,
+        choices=LOGICAL_OPERATORS,
+        default='AND',
+        help_text='Logical operator to combine multiple conditions'
+    )
 
     next_step = models.ForeignKey(
         "steps.Step",
@@ -40,6 +109,84 @@ class Rule(models.Model):
 
     def __str__(self):
         return self.name or self.condition[:50]
+    
+    def clean(self):
+        """Validate the rule"""
+        super().clean()
+        # Check for multiple default rules per step
+        if self.is_default:
+            existing_default = Rule.objects.filter(step=self.step, is_default=True).exclude(pk=self.pk)
+            if existing_default.exists():
+                raise ValidationError({'is_default': 'Only one default rule is allowed per step.'})
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
+    def evaluate_conditions(self, execution_data):
+        """
+        Evaluate conditions using the new RuleCondition model.
+        Falls back to legacy JSON conditions if no RuleCondition objects exist.
+        
+        Args:
+            execution_data: Dict of {field_name: value} from workflow execution
+            
+        Returns:
+            bool: True if rule matches, False otherwise
+        """
+        # Default rules always match
+        if self.is_default:
+            return True
+        
+        # Try to use new RuleCondition model first
+        conditions = self.conditions.all()
+        
+        if conditions.exists():
+            # Use new RuleCondition model
+            return self._evaluate_rule_conditions(conditions, execution_data)
+        elif self.condition:
+            # Fall back to legacy JSON conditions
+            return self.evaluate(execution_data)
+        else:
+            # No conditions defined
+            return False
+    
+    def _evaluate_rule_conditions(self, conditions, execution_data):
+        """
+        Evaluate conditions from RuleCondition model.
+        
+        Args:
+            conditions: QuerySet of RuleCondition objects
+            execution_data: Dict of {field_name: value}
+            
+        Returns:
+            bool: True if rule matches
+        """
+        from .rule_engine import evaluate_condition
+        
+        results = []
+        for condition in conditions:
+            actual_value = execution_data.get(condition.field_name)
+            result = evaluate_condition(condition, actual_value)
+            results.append(result)
+        
+        if not results:
+            return False
+        
+        # Combine results based on logical operator
+        if self.logical_operator == "OR":
+            return any(results)
+        else:  # AND (default)
+            return all(results)
+    
+    def get_logical_operator(self):
+        """Get the logical operator (AND/OR) for combining conditions"""
+        # Use the new field first, then fall back to legacy JSON
+        if self.logical_operator:
+            return self.logical_operator
+        
+        data = self.get_conditions()
+        return data.get("logical_operator", "AND")
 
     def get_conditions(self):
         """Parse and return conditions from JSON string"""
