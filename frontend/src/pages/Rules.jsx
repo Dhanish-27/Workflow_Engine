@@ -1,9 +1,25 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
-import { Edit2, Trash2, Plus, BookOpen, ArrowUp, ArrowDown } from 'lucide-react';
+import { Edit2, Trash2, Plus, BookOpen, ArrowUp, ArrowDown, GripVertical, AlertCircle } from 'lucide-react';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { rulesAPI, stepsAPI, workflowFieldsAPI, workflowsAPI } from '../services/api';
 import { Button, Card, Modal, Input, DataTable, Badge, EmptyState, Select } from '../components/ui';
-import { formatDate } from '../utils';
+import { formatDate, cn } from '../utils';
 
 // OPERATORS_BY_TYPE - same as in WorkflowConfigure
 const OPERATORS_BY_TYPE = {
@@ -308,6 +324,101 @@ const ConditionBuilderWrapper = ({ control, fields, name, watchIsDefault }) => {
     );
 };
 
+// Sortable Rule Row Component
+const SortableRuleRow = ({ rule, fields, steps, onEdit, onDelete }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: rule.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 1,
+        opacity: isDragging ? 0.8 : 1,
+    };
+
+    const conditionText = formatConditionsDisplay(rule.condition, fields);
+    const nextStep = steps.find(s => s.id === rule.next_step);
+
+    return (
+        <tr
+            ref={setNodeRef}
+            style={style}
+            className="hover:bg-gray-50 dark:hover:bg-dark-card transition-colors border-b border-gray-200 dark:border-dark-border"
+        >
+            <td className="px-4 py-3 w-10">
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-dark-border rounded text-gray-400"
+                >
+                    <GripVertical className="w-4 h-4" />
+                </div>
+            </td>
+            <td className="px-4 py-3 w-16">
+                <div className="flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-dark-border flex items-center justify-center">
+                        <span className="text-xs font-medium text-gray-600 dark:text-dark-muted">
+                            {rule.priority}
+                        </span>
+                    </div>
+                </div>
+            </td>
+            <td className="px-6 py-4 font-medium text-gray-900 dark:text-dark-text min-w-[150px]">
+                {rule.name}
+            </td>
+            <td className="px-6 py-4">
+                <div className="max-w-[300px]">
+                    {rule.is_default ? (
+                        <span className="text-sm text-gray-500 dark:text-dark-muted italic">
+                            Default rule (no conditions)
+                        </span>
+                    ) : (
+                        <code className="text-[11px] bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block truncate" title={conditionText}>
+                            {conditionText}
+                        </code>
+                    )}
+                </div>
+            </td>
+            <td className="px-6 py-4">
+                {nextStep ? (
+                    <Badge variant="info">{nextStep.name}</Badge>
+                ) : (
+                    <span className="text-gray-400 text-sm italic">End Workflow</span>
+                )}
+            </td>
+            <td className="px-6 py-4">
+                <Badge variant={rule.is_default ? 'success' : 'default'}>
+                    {rule.is_default ? 'Yes' : 'No'}
+                </Badge>
+            </td>
+            <td className="px-6 py-4">
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEdit(rule)}
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDelete(rule)}
+                    >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                </div>
+            </td>
+        </tr>
+    );
+};
+
 const Rules = () => {
     const [rules, setRules] = useState([]);
     const [steps, setSteps] = useState([]);
@@ -323,6 +434,13 @@ const Rules = () => {
     const { register, handleSubmit, reset, setValue, control, watch, formState: { errors } } = useForm();
 
     const watchIsDefault = watch('is_default', false);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         fetchData();
@@ -370,8 +488,20 @@ const Rules = () => {
 
         try {
             const response = await rulesAPI.list({ workflow: selectedWorkflowId });
-            const ruleData = response.data.results || response.data;
-            setRules(Array.isArray(ruleData) ? ruleData : []);
+            let ruleData = response.data.results || response.data;
+            
+            if (Array.isArray(ruleData)) {
+                // Sort by step and then priority for a consistent view
+                ruleData.sort((a, b) => {
+                    if (a.step !== b.step) {
+                        return String(a.step).localeCompare(String(b.step));
+                    }
+                    return a.priority - b.priority;
+                });
+                setRules(ruleData);
+            } else {
+                setRules([]);
+            }
         } catch (error) {
             console.error('Error fetching rules:', error);
             setRules([]);
@@ -522,35 +652,50 @@ const Rules = () => {
         }
     };
 
-    const handlePriorityChange = async (rule, direction) => {
-        const currentIndex = rules.findIndex(r => r.id === rule.id);
-        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const handleDragEnd = async (event, stepId) => {
+        const { active, over } = event;
 
-        if (newIndex < 0 || newIndex >= rules.length) return;
+        if (active.id !== over?.id) {
+            // Find all rules for THIS step
+            const stepRules = rules
+                .filter(r => r.step === stepId)
+                .sort((a, b) => a.priority - b.priority);
 
-        const newRules = [...rules];
-        [newRules[currentIndex], newRules[newIndex]] = [newRules[newIndex], newRules[currentIndex]];
+            const oldIndex = stepRules.findIndex((r) => r.id === active.id);
+            const newIndex = stepRules.findIndex((r) => r.id === over.id);
 
-        const updatedRulesPayload = newRules.map((r, idx) => ({
-            id: r.id,
-            priority: idx + 1
-        }));
+            if (oldIndex === -1 || newIndex === -1) return;
 
-        // Optimistically update UI
-        setRules(newRules.map((r, idx) => ({ ...r, priority: idx + 1 })));
+            const reorderedStepRules = arrayMove(stepRules, oldIndex, newIndex);
 
-        try {
-            await rulesAPI.reorder({ rules: updatedRulesPayload });
-            fetchRules();
-        } catch (error) {
-            console.error('Error updating priority:', error);
-            // Fallback for older API versions or errors
+            // Assign new priorities 1 to N for this step
+            const updatedRulesPayload = reorderedStepRules.map((r, idx) => ({
+                id: r.id,
+                priority: idx + 1
+            }));
+
+            // Optimistically update UI state
+            const updatedGlobalRules = rules.map(r => {
+                const updatedRule = updatedRulesPayload.find(ur => ur.id === r.id);
+                return updatedRule ? { ...r, priority: updatedRule.priority } : r;
+            });
+
+            // Sort rules for UI consistency
+            updatedGlobalRules.sort((a, b) => {
+                if (a.step !== b.step) {
+                    return String(a.step).localeCompare(String(b.step));
+                }
+                return a.priority - b.priority;
+            });
+            
+            setRules(updatedGlobalRules);
+
             try {
-                await rulesAPI.update(rule.id, { priority: direction === 'up' ? rule.priority - 1 : rule.priority + 1 });
+                await rulesAPI.reorder({ rules: updatedRulesPayload });
                 fetchRules();
-            } catch (fallbackError) {
-                console.error('Fallback error:', fallbackError);
-                fetchRules();
+            } catch (error) {
+                console.error('Error reordering rules:', error);
+                fetchRules(); // Revert on error
             }
         }
     };
@@ -565,125 +710,6 @@ const Rules = () => {
         const currentStepId = watch('step');
         return workflowSteps.filter(s => s.id !== currentStepId);
     }, [workflowSteps, watch('step')]);
-
-    const columns = [
-        {
-            accessorKey: 'priority',
-            header: 'Priority',
-            cell: ({ row }) => (
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => handlePriorityChange(row.original, 'up')}
-                        disabled={row.original.priority === 1}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-dark-border rounded disabled:opacity-30"
-                    >
-                        <ArrowUp className="w-3 h-3" />
-                    </button>
-                    <span className="w-6 text-center text-sm font-medium">
-                        {row.original.priority}
-                    </span>
-                    <button
-                        onClick={() => handlePriorityChange(row.original, 'down')}
-                        disabled={row.original.priority === rules.length}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-dark-border rounded disabled:opacity-30"
-                    >
-                        <ArrowDown className="w-3 h-3" />
-                    </button>
-                </div>
-            ),
-        },
-        {
-            accessorKey: 'name',
-            header: 'Rule Name',
-            cell: ({ row }) => (
-                <span className="font-medium text-gray-900 dark:text-dark-text">
-                    {row.original.name}
-                </span>
-            ),
-        },
-        {
-            accessorKey: 'condition',
-            header: 'Conditions',
-            cell: ({ row }) => {
-                const conditionText = formatConditionsDisplay(row.original.condition, fields);
-                return (
-                    <div className="max-w-[250px]">
-                        {row.original.is_default ? (
-                            <span className="text-sm text-gray-500 dark:text-dark-muted italic">
-                                Default rule (no conditions)
-                            </span>
-                        ) : (
-                            <code className="text-xs bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block truncate" title={conditionText}>
-                                {conditionText}
-                            </code>
-                        )}
-                    </div>
-                );
-            },
-        },
-        {
-            accessorKey: 'step',
-            header: 'Step',
-            cell: ({ row }) => {
-                const step = steps.find(s => s.id === row.original.step);
-                return <span className="text-gray-500 dark:text-dark-muted">{step?.name || '-'}</span>;
-            },
-        },
-        {
-            accessorKey: 'next_step',
-            header: 'Next Step',
-            cell: ({ row }) => {
-                const nextStep = steps.find(s => s.id === row.original.next_step);
-                return nextStep ? (
-                    <Badge variant="info">{nextStep.name}</Badge>
-                ) : (
-                    <span className="text-gray-400">End Workflow</span>
-                );
-            },
-        },
-        {
-            accessorKey: 'is_default',
-            header: 'Default',
-            cell: ({ row }) => (
-                <Badge variant={row.original.is_default ? 'success' : 'default'}>
-                    {row.original.is_default ? 'Yes' : 'No'}
-                </Badge>
-            ),
-        },
-        {
-            accessorKey: 'created_at',
-            header: 'Created',
-            cell: ({ row }) => formatDate(row.original.created_at),
-        },
-        {
-            id: 'actions',
-            header: 'Actions',
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(row.original);
-                        }}
-                    >
-                        <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirm(row.original);
-                        }}
-                    >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                </div>
-            ),
-        },
-    ];
 
     return (
         <div className="space-y-6">
@@ -728,24 +754,88 @@ const Rules = () => {
                 </div>
             )}
 
-            <Card className="p-0">
-                {rules.length === 0 && !isLoading ? (
-                    <EmptyState
-                        icon={BookOpen}
-                        title="No rules yet"
-                        description="Create your first rule to get started."
-                        action
-                        onAction={() => handleOpenModal()}
-                        actionLabel="Create Rule"
-                    />
-                ) : (
-                    <DataTable
-                        columns={columns}
-                        data={rules}
-                        isLoading={isLoading}
-                    />
+            <div className="space-y-8">
+                {workflowSteps.map((step) => {
+                    const stepRules = rules
+                        .filter(r => r.step === step.id)
+                        .sort((a, b) => a.priority - b.priority);
+
+                    if (stepRules.length === 0) return null;
+
+                    return (
+                        <div key={step.id} className="space-y-3">
+                            <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center gap-3">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-text">
+                                        {step.name}
+                                    </h3>
+                                    <Badge variant="secondary">
+                                        {stepRules.length} {stepRules.length === 1 ? 'Rule' : 'Rules'}
+                                    </Badge>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                                    <AlertCircle className="w-3.5 h-3.5" />
+                                    <span>Drag handle to reorder</span>
+                                </div>
+                            </div>
+
+                            <Card className="p-0 overflow-hidden border-gray-200 dark:border-dark-border shadow-sm">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-gray-50 dark:bg-dark-card border-b border-gray-200 dark:border-dark-border">
+                                            <tr>
+                                                <th className="px-4 py-3 w-10"></th>
+                                                <th className="px-4 py-3 w-16 text-center text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Priority</th>
+                                                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Rule Name</th>
+                                                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Conditions</th>
+                                                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Next Step</th>
+                                                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Default</th>
+                                                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider w-24 text-right pr-10">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragEnd={(e) => handleDragEnd(e, step.id)}
+                                            >
+                                                <SortableContext
+                                                    items={stepRules.map(r => r.id)}
+                                                    strategy={verticalListSortingStrategy}
+                                                >
+                                                    {stepRules.map((rule) => (
+                                                        <SortableRuleRow
+                                                            key={rule.id}
+                                                            rule={rule}
+                                                            fields={fields}
+                                                            steps={steps}
+                                                            onEdit={handleOpenModal}
+                                                            onDelete={setDeleteConfirm}
+                                                        />
+                                                    ))}
+                                                </SortableContext>
+                                            </DndContext>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        </div>
+                    );
+                })}
+
+                {rules.length === 0 && !isLoading && (
+                    <Card>
+                        <EmptyState
+                            icon={BookOpen}
+                            title="No rules yet"
+                            description="Create your first rule to get started."
+                            action
+                            onAction={() => handleOpenModal()}
+                            actionLabel="Create Rule"
+                        />
+                    </Card>
                 )}
-            </Card>
+            </div>
 
             {/* Add/Edit Modal */}
             <Modal

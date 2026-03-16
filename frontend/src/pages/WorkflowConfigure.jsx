@@ -1082,6 +1082,93 @@ const formatConditionsDisplay = (conditions, fields) => {
     }
 };
 
+// Sortable Rule Row Component for WorkflowRulesTab
+const SortableRuleRow = ({ rule, fields, steps, onEdit, onDelete }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: rule.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 1,
+        opacity: isDragging ? 0.8 : 1,
+    };
+
+    const conditionText = formatConditionsDisplay(rule.condition, fields);
+    const nextStep = steps.find(s => s.id === rule.next_step);
+
+    return (
+        <tr
+            ref={setNodeRef}
+            style={style}
+            className="hover:bg-gray-50 dark:hover:bg-dark-card transition-colors border-b border-gray-200 dark:border-dark-border"
+        >
+            <td className="px-4 py-3">
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-dark-border rounded text-gray-400"
+                >
+                    <GripVertical className="w-5 h-5" />
+                </div>
+            </td>
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-dark-border flex items-center justify-center">
+                        <span className="text-sm font-medium text-gray-600 dark:text-dark-muted">
+                            {rule.priority}
+                        </span>
+                    </div>
+                </div>
+            </td>
+            <td className="px-4 py-3 font-medium text-gray-900 dark:text-dark-text">
+                {rule.name}
+            </td>
+            <td className="px-4 py-3">
+                <div className="max-w-[300px]">
+                    {rule.is_default ? (
+                        <span className="text-sm text-gray-500 dark:text-dark-muted italic">
+                            Default rule (no conditions)
+                        </span>
+                    ) : (
+                        <code className="text-[11px] bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block truncate" title={conditionText}>
+                            {conditionText}
+                        </code>
+                    )}
+                </div>
+            </td>
+            <td className="px-4 py-3">
+                {nextStep ? (
+                    <Badge variant="info">{nextStep.name}</Badge>
+                ) : (
+                    <span className="text-gray-400 text-sm italic">End Workflow</span>
+                )}
+            </td>
+            <td className="px-4 py-3">
+                <Badge variant={rule.is_default ? 'success' : 'default'}>
+                    {rule.is_default ? 'Yes' : 'No'}
+                </Badge>
+            </td>
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(rule)}>
+                        <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onDelete(rule)}>
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                </div>
+            </td>
+        </tr>
+    );
+};
+
 // ============================================
 // RULES TAB (with Enhanced Rule Builder)
 // ============================================
@@ -1276,31 +1363,39 @@ const WorkflowRulesTab = ({ workflowId }) => {
         }
     };
 
-    // Handle priority change (move up/down)
-    const handlePriorityChange = async (rule, direction) => {
-        const currentIndex = rules.findIndex(r => r.id === rule.id);
-        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    // Handle drag and drop reordering
+    const handleDragEnd = async (event) => {
+        const { active, over } = event;
 
-        if (newIndex < 0 || newIndex >= rules.length) return;
+        if (active.id !== over?.id) {
+            const oldIndex = rules.findIndex((r) => r.id === active.id);
+            const newIndex = rules.findIndex((r) => r.id === over.id);
 
-        const newRules = [...rules];
-        [newRules[currentIndex], newRules[newIndex]] = [newRules[newIndex], newRules[currentIndex]];
+            const reorderedRules = arrayMove(rules, oldIndex, newIndex);
 
-        // Update priorities
-        const updatedRules = newRules.map((r, idx) => ({
-            ...r,
-            priority: idx + 1
-        }));
+            // Assign new priorities 1 to N
+            const updatedRules = reorderedRules.map((r, idx) => ({
+                ...r,
+                priority: idx + 1,
+            }));
 
-        setRules(updatedRules);
+            // Prepare payload for backend
+            const updatedRulesPayload = updatedRules.map(r => ({
+                id: r.id,
+                priority: r.priority
+            }));
 
-        // Persist to backend
-        try {
-            await rulesAPI.update(rule.id, { priority: direction === 'up' ? rule.priority - 1 : rule.priority + 1 });
-            fetchRules(selectedStepId);
-        } catch (error) {
-            console.error('Error updating priority:', error);
-            fetchRules(selectedStepId);
+            // Optimistically update UI
+            setRules(updatedRules);
+
+            // Persist the new order
+            try {
+                await rulesAPI.reorder({ rules: updatedRulesPayload });
+                fetchRules(selectedStepId);
+            } catch (error) {
+                console.error('Error reordering rules:', error);
+                fetchRules(selectedStepId); // Revert on error
+            }
         }
     };
 
@@ -1311,98 +1406,6 @@ const WorkflowRulesTab = ({ workflowId }) => {
 
     // Get default rule
     const defaultRule = rules.find(r => r.is_default);
-
-    const columns = [
-        {
-            accessorKey: 'priority',
-            header: 'Priority',
-            cell: ({ row }) => (
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => handlePriorityChange(row.original, 'up')}
-                        disabled={row.original.priority === 1}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-dark-border rounded disabled:opacity-30"
-                    >
-                        <ArrowUp className="w-3 h-3" />
-                    </button>
-                    <span className="w-6 text-center text-sm font-medium">
-                        {row.original.priority}
-                    </span>
-                    <button
-                        onClick={() => handlePriorityChange(row.original, 'down')}
-                        disabled={row.original.priority === rules.length}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-dark-border rounded disabled:opacity-30"
-                    >
-                        <ArrowDown className="w-3 h-3" />
-                    </button>
-                </div>
-            ),
-        },
-        {
-            accessorKey: 'name',
-            header: 'Rule Name',
-            cell: ({ row }) => (
-                <span className="font-medium text-gray-900 dark:text-dark-text">
-                    {row.original.name}
-                </span>
-            ),
-        },
-        {
-            accessorKey: 'condition',
-            header: 'Conditions',
-            cell: ({ row }) => {
-                const conditionText = formatConditionsDisplay(row.original.condition, fields);
-                return (
-                    <div className="max-w-[250px]">
-                        {row.original.is_default ? (
-                            <span className="text-sm text-gray-500 dark:text-dark-muted italic">
-                                Default rule (no conditions)
-                            </span>
-                        ) : (
-                            <code className="text-xs bg-gray-100 dark:bg-dark-border px-2 py-1 rounded block truncate" title={conditionText}>
-                                {conditionText}
-                            </code>
-                        )}
-                    </div>
-                );
-            },
-        },
-        {
-            accessorKey: 'next_step',
-            header: 'Next Step',
-            cell: ({ row }) => {
-                const nextStep = steps.find(s => s.id === row.original.next_step);
-                return nextStep ? (
-                    <Badge variant="info">{nextStep.name}</Badge>
-                ) : (
-                    <span className="text-gray-400">End Workflow</span>
-                );
-            },
-        },
-        {
-            accessorKey: 'is_default',
-            header: 'Default',
-            cell: ({ row }) => (
-                <Badge variant={row.original.is_default ? 'success' : 'default'}>
-                    {row.original.is_default ? 'Yes' : 'No'}
-                </Badge>
-            ),
-        },
-        {
-            id: 'actions',
-            header: 'Actions',
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(row.original)}>
-                        <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row.original)}>
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                </div>
-            ),
-        },
-    ];
 
     if (steps.length === 0) {
         return (
@@ -1464,7 +1467,7 @@ const WorkflowRulesTab = ({ workflowId }) => {
                 </Button>
             </div>
 
-            <Card className="p-0">
+            <Card className="p-0 overflow-hidden">
                 {rules.length === 0 ? (
                     <EmptyState
                         icon={BookOpen}
@@ -1475,12 +1478,44 @@ const WorkflowRulesTab = ({ workflowId }) => {
                         actionLabel="Add Rule"
                     />
                 ) : (
-                    <DataTable
-                        columns={columns}
-                        data={rules}
-                        isLoading={isLoading}
-                        showSearch={false}
-                    />
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 dark:bg-dark-card border-b border-gray-200 dark:border-dark-border">
+                                <tr>
+                                    <th className="px-4 py-3 w-12"></th>
+                                    <th className="px-4 py-3 w-16 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Priority</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Rule Name</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Conditions</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Next Step</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider">Default</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-dark-muted uppercase tracking-wider w-24">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-dark-border">
+                                <DndContext
+                                    sensors={sensors}
+                                    collisionDetection={closestCenter}
+                                    onDragEnd={handleDragEnd}
+                                >
+                                    <SortableContext
+                                        items={rules.map(r => r.id)}
+                                        strategy={verticalListSortingStrategy}
+                                    >
+                                        {rules.map((rule) => (
+                                            <SortableRuleRow
+                                                key={rule.id}
+                                                rule={rule}
+                                                fields={fields}
+                                                steps={steps}
+                                                onEdit={handleOpenModal}
+                                                onDelete={setDeleteConfirm}
+                                            />
+                                        ))}
+                                    </SortableContext>
+                                </DndContext>
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </Card>
 

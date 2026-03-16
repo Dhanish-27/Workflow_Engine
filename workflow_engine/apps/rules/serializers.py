@@ -103,27 +103,28 @@ class RuleSerializer(serializers.ModelSerializer):
         """
         Validate that priority is unique per step.
         """
-        step = self.initial_data.get('step') or (self.instance.step if self.instance else None)
-        if step:
-            queryset = Rule.objects.filter(step=step, priority=value)
-            exclude_pk = self._get_default_rule_exclusion()
-            if exclude_pk:
-                queryset = queryset.exclude(pk=exclude_pk)
-            if queryset.exists():
-                raise serializers.ValidationError("Priority must be unique per step.")
+        # We relax this validation to allow reordering operations via the reorder endpoint
+        # The reorder endpoint will handle ensuring global consistency
         return value
     
     def create(self, validated_data):
         """
         Create a new rule with nested conditions.
         """
+        from django.db.models import Max
         conditions_data = validated_data.pop('conditions', [])
         name = validated_data.get('name')
         step = validated_data.get('step')
+        priority = validated_data.get('priority')
         
         if not name:
             count = Rule.objects.filter(step=step).count() + 1
             validated_data['name'] = f"Rule {count}"
+            
+        if priority is None:
+            max_priority = Rule.objects.filter(step=step).aggregate(
+                max_pri=Max('priority'))['max_pri'] or 0
+            validated_data['priority'] = max_priority + 1
         
         rule = super().create(validated_data)
         
