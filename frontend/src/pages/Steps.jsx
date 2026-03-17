@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { Edit2, Trash2, Plus, ListOrdered } from 'lucide-react';
-import { stepsAPI, workflowsAPI } from '../services/api';
+import { stepsAPI, workflowsAPI, usersAPI } from '../services/api';
 import { Button, Card, Modal, Input, DataTable, Badge, EmptyState, Select } from '../components/ui';
 import { formatDate } from '../utils';
 
@@ -14,6 +14,7 @@ const Steps = () => {
     const [showModal, setShowModal] = useState(false);
     const [editingStep, setEditingStep] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [users, setUsers] = useState([]);
 
     const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
 
@@ -22,7 +23,17 @@ const Steps = () => {
     useEffect(() => {
         fetchSteps();
         fetchWorkflows();
+        fetchUsers();
     }, []);
+
+    const fetchUsers = async () => {
+        try {
+            const response = await usersAPI.list();
+            setUsers(response.data.results || response.data);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    };
 
     const fetchSteps = async () => {
         try {
@@ -54,10 +65,12 @@ const Steps = () => {
             setValue('name', step.name);
             setValue('step_type', step.step_type);
             setValue('approval_type', step.approval_type || 'general');
+            setValue('assigned_role', step.assigned_role || 'employee');
+            setValue('assigned_to', step.assigned_to?.id || step.assigned_to || '');
             setValue('order', step.order);
             setValue('workflow', step.workflow);
         } else {
-            reset({ name: '', step_type: 'task', approval_type: 'general', order: 1, workflow: '' });
+            reset({ name: '', step_type: 'task', approval_type: 'general', assigned_role: 'employee', assigned_to: '', order: 1, workflow: '' });
         }
         setShowModal(true);
     };
@@ -133,6 +146,10 @@ const Steps = () => {
                 row.original.step_type === 'approval' ? (
                     <span className="text-gray-500 dark:text-dark-muted">
                         {row.original.approval_type || '-'}
+                    </span>
+                ) : row.original.step_type === 'task' ? (
+                    <span className="text-gray-500 dark:text-dark-muted">
+                        {row.original.assigned_role || '-'}
                     </span>
                 ) : (
                     <span className="text-gray-400 dark:text-dark-muted">-</span>
@@ -280,6 +297,42 @@ const Steps = () => {
                                 <option value="finance_approval">Finance Approval</option>
                                 <option value="ceo_approval">CEO Approval</option>
                             </select>
+                        </div>
+                    )}
+
+                    {stepType === 'task' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
+                                    Assigned Role
+                                </label>
+                                <select
+                                    {...register('assigned_role')}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 dark:bg-dark-card dark:border-dark-border dark:text-dark-text"
+                                >
+                                    <option value="employee">Employee</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="finance">Finance</option>
+                                    <option value="ceo">CEO</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
+                                    Assigned To User
+                                </label>
+                                <select
+                                    {...register('assigned_to')}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 dark:bg-dark-card dark:border-dark-border dark:text-dark-text"
+                                >
+                                    <option value="">None (Role based)</option>
+                                    {users.map(user => (
+                                        <option key={user.id} value={user.id}>
+                                            {user.username}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     )}
 

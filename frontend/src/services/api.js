@@ -82,6 +82,23 @@ export const stepsAPI = {
     update: (id, data) => api.patch(`/steps/steps/${id}/`, data),
     delete: (id) => api.delete(`/steps/steps/${id}/`),
     reorder: (workflowId, data) => api.post(`/steps/steps/reorder/`, { workflow: workflowId, steps: data.steps }),
+
+    // Task Definitions (Templates)
+    getTaskDefinitions: (params) => api.get('/steps/definitions/', { params }),
+    createTaskDefinition: (data) => api.post('/steps/definitions/', data),
+    updateTaskDefinition: (id, data) => api.patch(`/steps/definitions/${id}/`, data),
+    deleteTaskDefinition: (id) => api.delete(`/steps/definitions/${id}/`),
+
+    // File Upload
+    uploadFile: (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post('/steps/definitions/upload/', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
 };
 
 // Rules API
@@ -105,6 +122,10 @@ export const executionsAPI = {
     retry: (id) => api.post(`/executions/${id}/retry/`),
     getLogs: (id) => api.get(`/executions/${id}/logs/`),
     getTimeline: (id) => api.get(`/executions/${id}/timeline/`),
+    getMyTasks: () => api.get('/executions/my-tasks/'),
+    getTaskHistory: () => api.get('/executions/tasks/history/'),
+    completeTask: (id, data) => api.post(`/executions/tasks/${id}/complete/`, data),
+    createTask: (data) => api.post('/executions/my-tasks/', data),
 };
 
 // Approvals API - Role-based approval tasks

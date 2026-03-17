@@ -45,6 +45,20 @@ class Execution(models.Model):
         )
     )
 
+    # Track which role needs to complete the current task step
+    pending_task_from = models.CharField(
+        max_length=30,
+        null=True,
+        blank=True,
+        choices=(
+            ("employee", "Employee"),
+            ("manager", "Manager"),
+            ("finance", "Finance"),
+            ("ceo", "CEO"),
+            ("admin", "Admin"),
+        )
+    )
+
     retries = models.IntegerField(default=0)
 
     triggered_by = models.ForeignKey(
@@ -154,3 +168,84 @@ class StepApproval(models.Model):
     
     def __str__(self):
         return f"{self.action} by {self.approved_by} on {self.step}"
+
+
+class Task(models.Model):
+    """
+    Tracks individual tasks within a workflow execution.
+    Supports verification fields (to show original data) and new request fields
+    (to request new data).
+    """
+
+    STATUS = (
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name="tasks",
+        null=True,
+        blank=True
+    )
+
+    step = models.ForeignKey(
+        "steps.Step",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks"
+    )
+
+    title = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    form_fields = models.JSONField(default=list, blank=True)
+    
+    # JSONField to store list of field names that need verification
+    verify_fields = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of field names that need verification"
+    )
+    
+    # JSONField to store the original data to verify against (copied from execution at task creation)
+    original_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Original data to verify against, copied from execution at task creation"
+    )
+
+    assigned_to = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="assigned_tasks"
+    )
+
+    status = models.CharField(max_length=20, choices=STATUS, default="pending")
+    
+    task_type = models.CharField(
+        max_length=30,
+        choices=(
+            ("generic", "Generic Task"),
+            ("document_upload", "Uploading Documents"),
+            ("verify_data", "Verifying the Documents"),
+            ("request_info", "Requesting Information"),
+        ),
+        default="generic"
+    )
+
+    data = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Task {self.id} - {self.status}"

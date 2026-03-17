@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import {
     ArrowLeft,
     Plus,
@@ -18,6 +18,11 @@ import {
     ChevronRight,
     ArrowUp,
     ArrowDown,
+    ShieldCheck,
+    FilePlus,
+    Info,
+    Eye,
+    Sparkles,
 } from 'lucide-react';
 import ReactFlow, {
     Background,
@@ -48,7 +53,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import { workflowsAPI, workflowFieldsAPI, stepsAPI, rulesAPI } from '../services/api';
+import { workflowsAPI, workflowFieldsAPI, stepsAPI, rulesAPI, usersAPI } from '../services/api';
 import { Button, Card, Modal, Input, Select, DataTable, Badge, EmptyState } from '../components/ui';
 import { cn } from '../utils';
 
@@ -62,6 +67,8 @@ const FIELD_TYPES = [
     { value: 'dropdown', label: 'Dropdown' },
     { value: 'date', label: 'Date' },
     { value: 'boolean', label: 'Boolean' },
+    { value: 'textarea', label: 'Long Text' },
+    { value: 'file_upload', label: 'File Upload' },
 ];
 
 const STEP_TYPES = [
@@ -80,9 +87,9 @@ const APPROVAL_TYPES = [
 const ROLES = [
     { value: 'employee', label: 'Employee' },
     { value: 'manager', label: 'Manager' },
-    { value: 'admin', label: 'Admin' },
     { value: 'finance', label: 'Finance' },
-    { value: 'hr', label: 'HR' },
+    { value: 'ceo', label: 'CEO' },
+    { value: 'admin', label: 'Admin' },
 ];
 
 // Enhanced OPERATORS_BY_TYPE with all required operators
@@ -596,7 +603,7 @@ const SortableStepRow = ({ step, onEdit, onDelete }) => {
                 </span>
             </td>
             <td className="px-4 py-3 text-gray-600 dark:text-dark-muted">
-                {step.assigned_to || step.approval_type || '-'}
+                {step.step_type === 'task' ? (step.assigned_role || '-') : (step.approval_type || '-')}
             </td>
             <td className="px-4 py-3 text-gray-600 dark:text-dark-muted text-sm">
                 {step.description || '-'}
@@ -621,10 +628,13 @@ const WorkflowStepsTab = ({ workflowId }) => {
     const [showModal, setShowModal] = useState(false);
     const [editingStep, setEditingStep] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [taskDefinitions, setTaskDefinitions] = useState([]); // Added state
 
     const { register, handleSubmit, reset, setValue, watch, control, formState: { errors } } = useForm();
 
     const selectedStepType = watch('step_type');
+    const selectedTaskDefinition = watch('task_definition'); // Watch template selection
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -635,7 +645,27 @@ const WorkflowStepsTab = ({ workflowId }) => {
 
     useEffect(() => {
         fetchSteps();
+        fetchUsers();
+        fetchTaskDefinitions(); // Fetch templates
     }, [workflowId]);
+
+    const fetchTaskDefinitions = async () => {
+        try {
+            const response = await stepsAPI.getTaskDefinitions();
+            setTaskDefinitions(response.data.results || response.data);
+        } catch (error) {
+            console.error('Error fetching task definitions:', error);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            const response = await usersAPI.list();
+            setUsers(response.data.results || response.data);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    };
 
     const fetchSteps = async () => {
         try {
@@ -680,12 +710,25 @@ const WorkflowStepsTab = ({ workflowId }) => {
     const handleOpenModal = (step = null) => {
         setEditingStep(step);
         if (step) {
+            // Process form_fields to convert options array to string for the form
+            const processedFormFields = (step.form_fields || []).map(field => ({
+                ...field,
+                is_required: field.is_required || false,
+                is_verify_field: field.is_verify_field || false,
+                is_new_field: field.is_new_field || false,
+                options: Array.isArray(field.options) ? field.options.join('\n') : (field.options || ''),
+            }));
+
             setValue('name', step.name);
             setValue('step_type', step.step_type);
             setValue('approval_type', step.approval_type || 'general');
+            setValue('assigned_role', step.assigned_role || 'employee');
+            setValue('assigned_to', step.assigned_to?.id || step.assigned_to || '');
             setValue('description', step.description);
+            setValue('task_definition', step.task_definition || ''); // Handle template ID
+            setValue('form_fields', processedFormFields);
         } else {
-            reset({ name: '', step_type: 'task', approval_type: 'general', description: '' });
+            reset({ name: '', step_type: 'task', approval_type: 'general', assigned_role: 'employee', assigned_to: '', description: '', task_definition: '', form_fields: [] });
         }
         setShowModal(true);
     };
@@ -698,10 +741,31 @@ const WorkflowStepsTab = ({ workflowId }) => {
 
     const onSubmit = async (data) => {
         try {
+            // Process form_fields to ensure proper data structure
+            let processedFormFields = [];
+            if (data.form_fields && Array.isArray(data.form_fields)) {
+                processedFormFields = data.form_fields.map(field => {
+                    // Convert options from string to array for dropdown fields
+                    let options = field.options;
+                    if (field.field_type === 'dropdown' && typeof options === 'string') {
+                        options = options.split('\n').map(o => o.trim()).filter(o => o);
+                    }
+                    return {
+                        ...field,
+                        options: options || [],
+                        // Ensure boolean fields are properly typed
+                        is_required: Boolean(field.is_required),
+                        is_verify_field: Boolean(field.is_verify_field),
+                        is_new_field: Boolean(field.is_new_field),
+                    };
+                }).filter(field => field.label || field.field_name); // Only save fields with label or field_name
+            }
+
             const payload = {
                 ...data,
                 workflow: workflowId,
                 order: editingStep ? editingStep.order : steps.length + 1,
+                form_fields: processedFormFields,
             };
 
             if (editingStep) {
@@ -814,19 +878,48 @@ const WorkflowStepsTab = ({ workflowId }) => {
                         error={errors.name?.message}
                     />
 
-                    <Controller
-                        name="step_type"
-                        control={control}
-                        defaultValue="task"
-                        render={({ field }) => (
-                            <Select
-                                label="Step Type"
-                                options={STEP_TYPES}
-                                value={field.value}
-                                onChange={field.onChange}
+                    <div className="grid grid-cols-2 gap-4">
+                        <Controller
+                            name="step_type"
+                            control={control}
+                            defaultValue="task"
+                            render={({ field }) => (
+                                <Select
+                                    label="Step Type"
+                                    options={STEP_TYPES}
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                />
+                            )}
+                        />
+
+                        {selectedStepType === 'task' && (
+                            <Controller
+                                name="task_definition"
+                                control={control}
+                                render={({ field }) => (
+                                    <Select
+                                        label="Use Template (Optional)"
+                                        options={[
+                                            { value: '', label: 'None (Custom Task)' },
+                                            ...taskDefinitions.map(td => ({ value: td.id, label: td.name }))
+                                        ]}
+                                        value={field.value}
+                                        onChange={(val) => {
+                                            field.onChange(val);
+                                            // Pre-fill fields if template selected
+                                            const template = taskDefinitions.find(t => t.id === val);
+                                            if (template) {
+                                                setValue('name', template.name);
+                                                setValue('description', template.description);
+                                            }
+                                        }}
+                                        helperText="Select a pre-built task type"
+                                    />
+                                )}
                             />
                         )}
-                    />
+                    </div>
 
                     {/* Show approval type only for approval steps */}
                     {selectedStepType === 'approval' && (
@@ -846,6 +939,42 @@ const WorkflowStepsTab = ({ workflowId }) => {
                         />
                     )}
 
+                    {/* Show assigned role only for task steps */}
+                    {selectedStepType === 'task' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <Controller
+                                name="assigned_role"
+                                control={control}
+                                defaultValue="employee"
+                                render={({ field }) => (
+                                    <Select
+                                        label="Assigned Role"
+                                        options={ROLES}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        helperText="Role responsible for this task"
+                                    />
+                                )}
+                            />
+                            <Controller
+                                name="assigned_to"
+                                control={control}
+                                render={({ field }) => (
+                                    <Select
+                                        label="Assigned To User (Optional)"
+                                        options={[
+                                            { value: '', label: 'None (Role based)' },
+                                            ...users.map(u => ({ value: u.id, label: u.username }))
+                                        ]}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        helperText="Specific user for this task"
+                                    />
+                                )}
+                            />
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
                             Description
@@ -857,6 +986,37 @@ const WorkflowStepsTab = ({ workflowId }) => {
                             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-dark-card dark:border-dark-border"
                         />
                     </div>
+
+                    {/* Task Fields - Only show for Task step type */}
+                    {selectedStepType === 'task' ? (
+                        <div className="pt-4 border-t border-gray-200 dark:border-dark-border">
+                            <div className="flex items-center gap-2 mb-4">
+                                <label className="block text-sm font-bold text-gray-900 dark:text-dark-text">
+                                    Task Fields
+                                </label>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400">
+                                    <Sparkles className="w-3 h-3 mr-1" />
+                                    Task Configuration
+                                </span>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-dark-muted mb-4">
+                                Configure fields to verify existing information or request new information for this task.
+                            </p>
+                            <FormFieldEditor control={control} register={register} />
+                        </div>
+                    ) : (
+                        <div className="pt-4 border-t border-gray-200 dark:border-dark-border">
+                            <div className="text-sm text-gray-500 dark:text-dark-muted bg-gray-50 dark:bg-dark-border/30 p-3 rounded-lg">
+                                <p className="flex items-center gap-2">
+                                    <Info className="w-4 h-4" />
+                                    Task fields are only available for "Task" step type.
+                                </p>
+                                <p className="text-xs mt-1 ml-6">
+                                    Change step type to "Task" to configure task-specific fields.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     <Modal.Footer>
                         <Button type="button" variant="secondary" onClick={handleCloseModal}>
@@ -1995,3 +2155,209 @@ const VisualBuilderTab = ({ workflowId }) => {
 };
 
 export default WorkflowConfigure;
+
+const FORM_FIELD_TYPES = [
+    { value: 'text', label: 'Text' },
+    { value: 'number', label: 'Number' },
+    { value: 'dropdown', label: 'Dropdown' },
+    { value: 'date', label: 'Date' },
+    { value: 'boolean', label: 'Checkbox' },
+    { value: 'textarea', label: 'Long Text' },
+    { value: 'file_upload', label: 'File Upload' },
+];
+
+const FormFieldEditor = ({ control, register }) => {
+    const { fields, append, remove } = useFieldArray({
+        control,
+        name: "form_fields"
+    });
+
+    // Helper to get field type color
+    const getFieldBorderColor = (index) => {
+        const formValues = control._formValues?.form_fields?.[index];
+        if (formValues?.is_verify_field) return 'border-l-4 border-l-blue-500';
+        if (formValues?.is_new_field) return 'border-l-4 border-l-green-500';
+        return 'border-l-4 border-l-gray-300';
+    };
+
+    return (
+        <div className="space-y-4">
+            {fields.length === 0 && (
+                <div className="text-center py-8 text-gray-500 dark:text-dark-muted">
+                    <p className="text-sm">No task fields configured.</p>
+                    <p className="text-xs mt-1">Add fields below to define what information is needed for this task.</p>
+                </div>
+            )}
+            {fields.map((field, index) => {
+                const formValues = control._formValues?.form_fields?.[index];
+                const isVerify = formValues?.is_verify_field;
+                const isNew = formValues?.is_new_field;
+
+                return (
+                    <div
+                        key={field.id}
+                        className={`p-4 bg-gray-50 dark:bg-dark-border/30 rounded-lg border border-gray-200 dark:border-dark-border space-y-3 relative ${getFieldBorderColor(index)}`}
+                    >
+                        {/* Field Type Badge */}
+                        <div className="absolute top-2 left-2 flex gap-1">
+                            {isVerify && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400">
+                                    <ShieldCheck className="w-3 h-3" />
+                                    Verify
+                                </span>
+                            )}
+                            {isNew && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400">
+                                    <Sparkles className="w-3 h-3" />
+                                    New
+                                </span>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => remove(index)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+
+                        <div className="grid grid-cols-2 gap-3 mt-4">
+                            <Input
+                                label="Field Name"
+                                placeholder="e.g. employee_name"
+                                {...register(`form_fields.${index}.field_name`, { required: 'Field name is required' })}
+                                helperText="Unique identifier (no spaces)"
+                            />
+                            <Input
+                                label="Field Label"
+                                placeholder="e.g. Employee Name"
+                                {...register(`form_fields.${index}.label`, { required: 'Label is required' })}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <Controller
+                                name={`form_fields.${index}.field_type`}
+                                control={control}
+                                defaultValue="text"
+                                render={({ field }) => (
+                                    <Select
+                                        label="Field Type"
+                                        options={FORM_FIELD_TYPES}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                    />
+                                )}
+                            />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
+                                    Description / Help Text
+                                </label>
+                                <Input
+                                    placeholder="Optional help text"
+                                    {...register(`form_fields.${index}.description`)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Dropdown options - show only for dropdown type */}
+                        {control._formValues.form_fields?.[index]?.field_type === 'dropdown' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-1.5">
+                                    Options (one per line)
+                                </label>
+                                <textarea
+                                    {...register(`form_fields.${index}.options`)}
+                                    placeholder="High\nMedium\nLow"
+                                    rows={3}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-dark-card dark:border-dark-border"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Enter each option on a new line</p>
+                            </div>
+                        )}
+
+                        {/* Checkboxes for verify and new field */}
+                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-gray-200 dark:border-dark-border">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    {...register(`form_fields.${index}.is_required`)}
+                                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-dark-text">Required</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    {...register(`form_fields.${index}.is_verify_field`)}
+                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-dark-text">Verify Existing</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    {...register(`form_fields.${index}.is_new_field`)}
+                                    className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-dark-text">New Information Request</span>
+                            </label>
+                        </div>
+
+                        {/* Info text based on field type */}
+                        {(isVerify || isNew) && (
+                            <div className={`text-xs p-2 rounded ${isVerify ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'}`}>
+                                {isVerify && (
+                                    <span className="flex items-center gap-1">
+                                        <Eye className="w-3 h-3" />
+                                        This field will verify existing data from the request
+                                    </span>
+                                )}
+                                {isNew && (
+                                    <span className="flex items-center gap-1">
+                                        <FilePlus className="w-3 h-3" />
+                                        This field will request new information from the user
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full border-dashed"
+                onClick={() => append({
+                    field_name: '',
+                    label: '',
+                    field_type: 'text',
+                    is_required: false,
+                    is_verify_field: false,
+                    is_new_field: true,
+                    options: '',
+                    description: ''
+                })}
+            >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Task Field
+            </Button>
+
+            {/* Help text */}
+            <div className="text-xs text-gray-500 dark:text-dark-muted bg-gray-50 dark:bg-dark-border/30 p-3 rounded-lg">
+                <p className="font-medium mb-1">Field Types:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                    <li><strong>Verify Existing:</strong> Field verifies information already in the request</li>
+                    <li><strong>New Information:</strong> Field requests new information from the user</li>
+                    <li>For dropdown fields, enter options one per line</li>
+                    <li>File Upload fields allow users to upload documents</li>
+                </ul>
+            </div>
+        </div>
+    );
+};

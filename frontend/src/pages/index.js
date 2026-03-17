@@ -12,3 +12,4 @@ export { default as Approvals } from './Approvals';
 export { default as CreateRequest } from './CreateRequest';
 export { default as MyRequests } from './MyRequests';
 export { default as Notifications } from './Notifications';
+export { default as Tasks } from './Tasks';

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
     LayoutDashboard,
@@ -14,9 +15,12 @@ import {
     Award,
     User,
     Bell,
+    CheckCircle,
+    Plus,
 } from 'lucide-react';
 import { cn } from '../../utils';
 import { useUIStore, useAuthStore } from '../../store';
+import QuickTaskModal from '../QuickTaskModal';
 
 const adminMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -27,6 +31,7 @@ const adminMenuItems = [
     { path: '/rules', icon: BookOpen, label: 'Rules' },
     { path: '/executions', icon: PlayCircle, label: 'Executions' },
     { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
+    { path: '/tasks', icon: CheckCircle, label: 'Tasks' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
     { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
     { path: '/notifications', icon: Bell, label: 'Notifications' },
@@ -36,6 +41,7 @@ const managerMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/approvals', icon: CheckSquare, label: 'My Approvals' },
+    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
     { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
@@ -46,6 +52,7 @@ const financeMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/approvals', icon: DollarSign, label: 'Finance Approvals' },
+    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
     { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
@@ -56,6 +63,7 @@ const ceoMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/profile', icon: User, label: 'My Profile' },
     { path: '/approvals', icon: Award, label: 'Final Approvals' },
+    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
     { path: '/executions', icon: PlayCircle, label: 'Execution History' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
     { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
@@ -65,6 +73,7 @@ const ceoMenuItems = [
 const employeeMenuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/profile', icon: User, label: 'My Profile' },
+    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
     { path: '/create-request', icon: FileText, label: 'Create Request' },
     { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
     { path: '/notifications', icon: Bell, label: 'Notifications' },
@@ -73,6 +82,7 @@ const employeeMenuItems = [
 const Sidebar = () => {
     const { sidebarOpen, toggleSidebar } = useUIStore();
     const { user, getRoleDisplayName } = useAuthStore();
+    const [isQuickTaskOpen, setIsQuickTaskOpen] = useState(false);
 
     const role = user?.role || 'employee';
 
@@ -144,8 +154,20 @@ const Sidebar = () => {
                                 )
                             }
                         >
-                            <item.icon className="w-5 h-5" />
-                            {item.label}
+                            <item.icon className="w-5 h-5 flex-shrink-0" />
+                            <span className="flex-1">{item.label}</span>
+                            {item.path === '/tasks' && user?.role === 'admin' && (
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setIsQuickTaskOpen(true);
+                                    }}
+                                    className="p-1 hover:bg-white/20 rounded-md transition-colors"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                </button>
+                            )}
                         </NavLink>
                     ))}
                 </nav>
@@ -168,6 +190,11 @@ const Sidebar = () => {
                     </div>
                 </div>
             </aside>
+
+            <QuickTaskModal 
+                isOpen={isQuickTaskOpen} 
+                onClose={() => setIsQuickTaskOpen(false)} 
+            />
         </>
     );
 };

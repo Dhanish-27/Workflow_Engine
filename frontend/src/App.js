@@ -19,6 +19,7 @@ import {
     CreateRequest,
     MyRequests,
     Notifications,
+    Tasks,
 } from './pages';
 
 function App() {
@@ -114,6 +115,13 @@ function App() {
                     <Route path="/notifications" element={
                         <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'ceo', 'finance']}>
                             <Notifications />
+                        </PrivateRoute>
+                    } />
+
+                    {/* Tasks - All authenticated users */}
+                    <Route path="/tasks" element={
+                        <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'ceo', 'finance']}>
+                            <Tasks />
                         </PrivateRoute>
                     } />
                 </Route>

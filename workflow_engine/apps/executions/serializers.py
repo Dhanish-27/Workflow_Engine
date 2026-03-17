@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import Execution, ExecutionLog, StepApproval
+from .models import Execution, ExecutionLog, StepApproval, Task
+from apps.accounts.serializers import UserSerializer
+from apps.steps.serializers import StepSerializer
+from apps.steps.models import Step
 
 
 class ExecutionLogSerializer(serializers.ModelSerializer):
@@ -113,3 +116,55 @@ class ExecutionSerializer(serializers.ModelSerializer):
         if obj.status == 'pending':
             return obj.get_pending_approval_from_display() or obj.pending_approval_from
         return None
+
+
+class ExecutionNestedSerializer(serializers.ModelSerializer):
+    """Nested serializer for Execution in Task serializer"""
+    workflow_name = serializers.CharField(source='workflow.name', read_only=True)
+    
+    class Meta:
+        model = Execution
+        fields = ['id', 'workflow', 'workflow_name', 'status']
+
+
+class StepNestedSerializer(serializers.ModelSerializer):
+    """Nested serializer for Step in Task serializer"""
+    class Meta:
+        model = Step
+        fields = ['id', 'name', 'step_type']
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    """Serializer for Task model with nested read-only representations"""
+    execution = ExecutionNestedSerializer(read_only=True)
+    step = StepNestedSerializer(read_only=True)
+    assigned_to = UserSerializer(read_only=True)
+    status_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            'execution',
+            'step',
+            'assigned_to',
+            'status',
+            'data',
+            'created_at',
+            'completed_at',
+            'status_display',
+            'title',
+            'description',
+            'form_fields',
+            'task_type',
+        ]
+        read_only_fields = ['id', 'created_at', 'completed_at']
+    
+    def get_status_display(self, obj):
+        """Returns human-readable status"""
+        return obj.get_status_display()
+
+
+class TaskCompleteSerializer(serializers.Serializer):
+    """Serializer for completing a task - only requires data field"""
+    data = serializers.JSONField(required=False, allow_null=True)

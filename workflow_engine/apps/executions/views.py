@@ -10,8 +10,8 @@ from datetime import timedelta
 from apps.accounts.models import User
 from apps.workflows.models import Workflow
 from apps.workflows.models import Workflow as WorkflowModel
-from .models import Execution, ExecutionLog, StepApproval
-from .serializers import ExecutionSerializer, ExecutionLogSerializer
+from .models import Execution, ExecutionLog, StepApproval, Task
+from .serializers import ExecutionSerializer, ExecutionLogSerializer, TaskSerializer, TaskCompleteSerializer
 from .permissions import (
     CanExecuteWorkflow,
     CanApproveExecution,
@@ -108,6 +108,13 @@ class ExecutionViewSet(viewsets.ModelViewSet):
         execution = self.get_object()
         user = request.user
         
+        # Safety check: Only approval steps can be approved via this endpoint
+        if execution.current_step and execution.current_step.step_type != "approval":
+            return Response(
+                {"error": "Current step is not an approval step. Please complete the task instead."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Check if execution is waiting for approval
         if execution.status not in ["pending", "in_progress"]:
             return Response(
@@ -569,4 +576,146 @@ class ApprovalTasksView(APIView):
             executions = Execution.objects.none()
         
         serializer = ExecutionSerializer(executions, many=True)
+        return Response(serializer.data)
+
+
+class MyTasksView(APIView):
+    """API endpoint to get pending tasks assigned to the current user"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        # Get pending tasks assigned to the current user
+        tasks = Task.objects.filter(
+            assigned_to=user,
+            status="pending"
+        )
+        
+        serializer = TaskSerializer(tasks, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Create a new standalone task"""
+        serializer = TaskSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TaskCompleteView(APIView):
+    """API endpoint to complete a task assigned to the current user"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, task_id):
+        user = request.user
+        
+        # Validate task exists and belongs to current user
+        try:
+            task = Task.objects.get(id=task_id, assigned_to=user)
+        except Task.DoesNotExist:
+            return Response(
+                {"error": "Task not found or unauthorized"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Validate task status is pending
+        if task.status != "pending":
+            return Response(
+                {"error": "Task is not pending"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate using TaskCompleteSerializer
+        serializer = TaskCompleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update task status to completed
+        task.status = "completed"
+        task.completed_at = timezone.now()
+        
+        # Get execution and current_step early to avoid NameError and ensure availability
+        execution = task.execution
+        current_step = task.step
+
+        # Save task data from request.data
+        if serializer.validated_data.get('data') is not None:
+            task.data = serializer.validated_data['data']
+            
+            # If task has new_field definitions, merge the data into execution.data
+            if task.form_fields and isinstance(task.form_fields, list):
+                new_fields = []
+                for field in task.form_fields:
+                    if isinstance(field, dict) and field.get('is_new_field'):
+                        field_name = field.get('field_name') or field.get('name') or field.get('key')
+                        if field_name:
+                            new_fields.append(field_name)
+                
+                # If there are new fields, update execution.data with the submitted values
+                if new_fields and task.data and execution:
+                    execution_data = execution.data.copy() if execution.data else {}
+                    for field_name in new_fields:
+                        if field_name in task.data:
+                            execution_data[field_name] = task.data[field_name]
+                    execution.data = execution_data
+                    execution.save()
+        
+        task.save()
+        
+        # execution and current_step are already defined above
+        
+        if current_step and execution:
+            # Get the next step
+            next_step, evaluated_rules = get_next_step(current_step, execution.data)
+            
+            # Log the task completion
+            ExecutionLog.objects.create(
+                execution=execution,
+                step_name=current_step.name,
+                step_type=current_step.step_type,
+                evaluated_rules=evaluated_rules,
+                selected_next_step=str(next_step) if next_step else None,
+                status="completed",
+                approver_id=user.id,
+                approver_role=user.role,
+                started_at=task.created_at,
+                ended_at=task.completed_at
+            )
+            
+            # Clear pending fields when moving to next step
+            execution.pending_approval_from = None
+            execution.pending_task_from = None
+            
+            # Update execution with next step
+            execution.current_step = next_step
+            execution.save()
+            
+            # Continue processing the execution
+            from .engine import process_execution
+            process_execution(execution)
+        
+        # Return the updated task
+        task_serializer = TaskSerializer(task)
+        return Response(task_serializer.data)
+
+
+class TaskHistoryView(APIView):
+    """API endpoint to get completed tasks for the current user"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        # Get completed tasks assigned to the current user, ordered by most recent first
+        tasks = Task.objects.filter(
+            assigned_to=user,
+            status="completed"
+        ).order_by("-completed_at")
+        
+        serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)

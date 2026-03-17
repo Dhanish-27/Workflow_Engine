@@ -1,6 +1,8 @@
 from django.utils import timezone
+from django.db.models import Q
 from apps.rules.models import Rule
-from apps.executions.models import ExecutionLog
+from apps.executions.models import ExecutionLog, Task
+from apps.accounts.models import User
 from apps.notifications.services import (
     notify_approval_required,
     notify_approved,
@@ -11,6 +13,9 @@ from apps.emails.services import (
     send_approved_email,
     send_completed_email,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_next_step(step, data):
@@ -81,8 +86,10 @@ def process_execution(execution):
             execution.save()
         elif execution.status == "pending":
             # If status is pending but no current step, it means we probably just approved the last step
+            # Also check if we completed a task step
             execution.status = "completed"
             execution.pending_approval_from = None
+            execution.pending_task_from = None
             execution.save()
             
             # Send completion notifications
@@ -96,7 +103,10 @@ def process_execution(execution):
     while execution.current_step:
         current_step = execution.current_step
         
-        # If it's an approval step, we stop here and wait for user input
+        # Clear pending fields when starting a new step to ensure a clean slate
+        # These will be set if the step pauses (approval or task)
+        execution.pending_approval_from = None
+        execution.pending_task_from = None
         if current_step.step_type == "approval":
             # Map approval_type to pending_approval_from
             approval_type_map = {
@@ -116,9 +126,228 @@ def process_execution(execution):
             except Exception:
                 pass
             return
+        
+        # If it's a task step, create tasks for users with the matching role
+        if current_step.step_type == "task":
+            # Check if tasks already exist for this execution step
+            existing_tasks = Task.objects.filter(
+                execution=execution,
+                step=current_step
+            )
             
-        # For non-approval steps (task, notification), evaluate rules and move to next
-        next_step, evaluated_rules = get_next_step(current_step, execution.data)
+            if existing_tasks.exists():
+                # Tasks already exist, check if all are completed
+                pending_tasks = existing_tasks.filter(status="pending")
+                if pending_tasks.exists():
+                    # Still have pending tasks, execution stays paused
+                    execution.status = "pending"
+                    execution.pending_task_from = current_step.assigned_role
+                    execution.save()
+                    return
+                # All tasks completed, continue to next step
+            else:
+                # Create new tasks for users with the assigned role or specific user
+                assigned_role = current_step.assigned_role
+                assigned_user = current_step.assigned_to
+
+                if assigned_user:
+                    # Create a single task for the specific user
+                    task_title = current_step.name
+                    task_description = current_step.description
+                    task_form_fields = current_step.form_fields
+
+                    # If step has a task definition, use its properties
+                    task_type = "generic"
+                    verify_fields = []
+                    original_data = None
+                    
+                    if current_step.task_definition:
+                        task_title = current_step.task_definition.name
+                        task_description = current_step.task_definition.description
+                        task_form_fields = current_step.task_definition.form_fields
+                        task_type = current_step.task_definition.task_type
+                        
+                        # Extract verify_fields and new_field from form_fields
+                        if task_form_fields:
+                            for field in task_form_fields:
+                                if isinstance(field, dict):
+                                    if field.get('is_verify_field'):
+                                        field_name = field.get('field_name') or field.get('name') or field.get('key')
+                                        if field_name:
+                                            verify_fields.append(field_name)
+                    
+                    # Copy execution data for verification purposes
+                    original_data = execution.data.copy() if execution.data else {}
+
+                    Task.objects.create(
+                        execution=execution,
+                        step=current_step,
+                        assigned_to=assigned_user,
+                        title=task_title,
+                        description=task_description,
+                        form_fields=task_form_fields,
+                        task_type=task_type,
+                        verify_fields=verify_fields,
+                        original_data=original_data,
+                        status="pending"
+                    )
+                    
+                    # Pause execution and wait for task completion
+                    execution.status = "pending"
+                    execution.pending_task_from = f"User: {assigned_user.username}"
+                    execution.save()
+                    
+                    # Log the task creation
+                    ExecutionLog.objects.create(
+                        execution=execution,
+                        step_name=current_step.name,
+                        step_type=current_step.step_type,
+                        evaluated_rules=[],
+                        selected_next_step=None,
+                        status="pending",
+                        started_at=timezone.now(),
+                        ended_at=timezone.now()
+                    )
+                    return
+                elif not assigned_role:
+                    # Auto-assign to execution.triggered_by (the request creator) if no assigned_to or assigned_role
+                    triggered_by = execution.triggered_by
+                    
+                    if triggered_by:
+                        task_title = current_step.name
+                        task_description = current_step.description
+                        task_form_fields = current_step.form_fields
+
+                        # If step has a task definition, use its properties
+                        task_type = "generic"
+                        verify_fields = []
+                        original_data = None
+                        
+                        if current_step.task_definition:
+                            task_title = current_step.task_definition.name
+                            task_description = current_step.task_definition.description
+                            task_form_fields = current_step.task_definition.form_fields
+                            task_type = current_step.task_definition.task_type
+                            
+                            # Extract verify_fields and new_field from form_fields
+                            if task_form_fields:
+                                for field in task_form_fields:
+                                    if isinstance(field, dict):
+                                        if field.get('is_verify_field'):
+                                            field_name = field.get('field_name') or field.get('name') or field.get('key')
+                                            if field_name:
+                                                verify_fields.append(field_name)
+                        
+                        # Copy execution data for verification purposes
+                        original_data = execution.data.copy() if execution.data else {}
+
+                        Task.objects.create(
+                            execution=execution,
+                            step=current_step,
+                            assigned_to=triggered_by,
+                            title=task_title,
+                            description=task_description,
+                            form_fields=task_form_fields,
+                            task_type=task_type,
+                            verify_fields=verify_fields,
+                            original_data=original_data,
+                            status="pending"
+                        )
+                        
+                        # Pause execution and wait for task completion
+                        execution.status = "pending"
+                        execution.pending_task_from = f"User: {triggered_by.username}"
+                        execution.save()
+                        
+                        # Log the task creation
+                        ExecutionLog.objects.create(
+                            execution=execution,
+                            step_name=current_step.name,
+                            step_type=current_step.step_type,
+                            evaluated_rules=[],
+                            selected_next_step=None,
+                            status="pending",
+                            started_at=timezone.now(),
+                            ended_at=timezone.now()
+                        )
+                        return
+                    else:
+                        logger.warning(f"Task step {current_step.name} has no assigned_role, assigned_to, or triggered_by")
+                        # Still evaluate rules and move to next step if no user is available
+                        next_step, evaluated_rules = get_next_step(current_step, execution.data)
+                else:
+                    # Get users with the matching role
+                    users_with_role = User.objects.filter(role=assigned_role)
+                    
+                    if not users_with_role.exists():
+                        logger.warning(f"No users found with role '{assigned_role}' for task step {current_step.name}")
+                        # Evaluate rules and move to next step even if no users found
+                        next_step, evaluated_rules = get_next_step(current_step, execution.data)
+                    else:
+                        task_title = current_step.name
+                        task_description = current_step.description
+                        task_form_fields = current_step.form_fields
+
+                        task_type = "generic"
+                        verify_fields = []
+                        original_data = None
+                        
+                        if current_step.task_definition:
+                            task_title = current_step.task_definition.name
+                            task_description = current_step.task_definition.description
+                            task_form_fields = current_step.task_definition.form_fields
+                            task_type = current_step.task_definition.task_type
+                            
+                            # Extract verify_fields and new_field from form_fields
+                            if task_form_fields:
+                                for field in task_form_fields:
+                                    if isinstance(field, dict):
+                                        if field.get('is_verify_field'):
+                                            field_name = field.get('field_name') or field.get('name') or field.get('key')
+                                            if field_name:
+                                                verify_fields.append(field_name)
+                        
+                        # Copy execution data for verification purposes
+                        original_data = execution.data.copy() if execution.data else {}
+
+                        # Create tasks for each user with the matching role
+                        for user in users_with_role:
+                            Task.objects.create(
+                                execution=execution,
+                                step=current_step,
+                                assigned_to=user,
+                                title=task_title,
+                                description=task_description,
+                                form_fields=task_form_fields,
+                                task_type=task_type,
+                                verify_fields=verify_fields,
+                                original_data=original_data,
+                                status="pending"
+                            )
+                        
+                        # Pause execution and wait for task completion
+                        execution.status = "pending"
+                        execution.pending_task_from = assigned_role
+                        execution.save()
+                        
+                        # Log the task creation
+                        ExecutionLog.objects.create(
+                            execution=execution,
+                            step_name=current_step.name,
+                            step_type=current_step.step_type,
+                            evaluated_rules=[],
+                            selected_next_step=None,
+                            status="pending",
+                            started_at=timezone.now(),
+                            ended_at=timezone.now()
+                        )
+                        return
+            # If we get here, either tasks existed but are completed, or no role was assigned
+            # Evaluate rules and move to next step
+            next_step, evaluated_rules = get_next_step(current_step, execution.data)
+        else:
+            # For non-approval, non-task steps (notification), evaluate rules and move to next
+            next_step, evaluated_rules = get_next_step(current_step, execution.data)
         
         # Log the automated transition
         ExecutionLog.objects.create(
@@ -132,13 +361,16 @@ def process_execution(execution):
             ended_at=timezone.now()
         )
         
-        # Update execution state
+        # Clear pending fields when moving to next step
+        execution.pending_approval_from = None
+        execution.pending_task_from = None
         execution.current_step = next_step
         
         # If no next step, we are done
         if not next_step:
             execution.status = "completed"
             execution.pending_approval_from = None
+            execution.pending_task_from = None
             execution.save()
             
             # Send completion notifications

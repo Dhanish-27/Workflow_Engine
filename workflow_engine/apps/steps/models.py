@@ -2,6 +2,75 @@ import uuid
 from django.db import models
 
 
+class TaskDefinition(models.Model):
+    """
+    TaskDefinition model for defining task templates.
+    Supports fields that can verify existing information (verify_existing = true)
+    and fields that request new information (is_new_field = true).
+    """
+    TASK_TYPES = (
+        ("generic", "Generic Task"),
+        ("document_upload", "Uploading Documents"),
+        ("verify_data", "Verifying the Documents"),
+        ("request_info", "Requesting Information"),
+    )
+
+    FIELD_TYPES = (
+        ("text", "Text"),
+        ("number", "Number"),
+        ("dropdown", "Dropdown"),
+        ("date", "Date"),
+        ("boolean", "Boolean"),
+        ("file_upload", "File Upload"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    task_type = models.CharField(max_length=30, choices=TASK_TYPES, default="generic")
+    
+    # Individual field properties
+    field_type = models.CharField(
+        max_length=20,
+        choices=FIELD_TYPES,
+        blank=True,
+        default=""
+    )
+    field_name = models.CharField(max_length=100, blank=True, default="")
+    is_required = models.BooleanField(default=False)
+    is_verify_field = models.BooleanField(
+        default=False,
+        help_text="If true, this field verifies existing data"
+    )
+    is_new_field = models.BooleanField(
+        default=False,
+        help_text="If true, this requests new data"
+    )
+    options = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Options for dropdown fields"
+    )
+    field_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Help text for the field"
+    )
+    order = models.IntegerField(
+        default=0,
+        help_text="Order of the field"
+    )
+    
+    # JSON field for storing array of field definitions
+    form_fields = models.JSONField(default=list, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Step(models.Model):
 
     STEP_TYPES = (
@@ -35,6 +104,15 @@ class Step(models.Model):
         choices=STEP_TYPES
     )
 
+    # Link to a pre-defined task template
+    task_definition = models.ForeignKey(
+        TaskDefinition,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="steps"
+    )
+
     # Approval type determines which role can approve this step
     approval_type = models.CharField(
         max_length=30,
@@ -52,9 +130,25 @@ class Step(models.Model):
         related_name="assigned_steps"
     )
 
+    # Role required to complete this task step
+    assigned_role = models.CharField(
+        max_length=20,
+        choices=(
+            ("employee", "Employee"),
+            ("manager", "Manager"),
+            ("finance", "Finance"),
+            ("ceo", "CEO"),
+            ("admin", "Admin"),
+        ),
+        blank=True,
+        null=True,
+    )
+
     order = models.IntegerField()
 
     metadata = models.JSONField(default=dict)
+
+    form_fields = models.JSONField(default=list, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
