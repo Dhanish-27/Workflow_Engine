@@ -124,17 +124,20 @@ class ExecutionViewSet(viewsets.ModelViewSet):
 
         # Check if user has permission to approve
         if execution.pending_approval_from:
-            if execution.pending_approval_from == "manager" and user.role != "manager":
+            user_role = user.role.lower() if user.role else ''
+            pending_role = execution.pending_approval_from.lower() if execution.pending_approval_from else ''
+            
+            if pending_role == "manager" and user_role != "manager":
                 return Response(
                     {"error": "Only managers can approve this step"},
                     status=status.HTTP_403_FORBIDDEN
                 )
-            elif execution.pending_approval_from == "finance" and user.role != "finance":
+            elif pending_role == "finance" and user_role != "finance":
                 return Response(
                     {"error": "Only finance can approve this step"},
                     status=status.HTTP_403_FORBIDDEN
                 )
-            elif execution.pending_approval_from == "ceo" and user.role != "ceo":
+            elif pending_role == "ceo" and user_role != "ceo":
                 return Response(
                     {"error": "Only CEO can approve this step"},
                     status=status.HTTP_403_FORBIDDEN
@@ -180,11 +183,19 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             ended_at=timezone.now()
         )
 
-        # Move to next step and continue automatic processing
-        execution.current_step = next_step
+        # If there's a next step, move to it; otherwise mark execution as completed
+        if next_step:
+            execution.current_step = next_step
+            execution.status = "in_progress"
+        else:
+            execution.current_step = None
+            execution.status = "completed"
+            execution.pending_approval_from = None
         execution.save()
         
-        process_execution(execution)
+        # Only process further if there's a next step
+        if next_step:
+            process_execution(execution)
 
         return Response({"status": execution.status, "execution_id": str(execution.id)})
 

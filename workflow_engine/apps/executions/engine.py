@@ -158,7 +158,7 @@ def process_execution(execution):
                     task_form_fields = current_step.form_fields
 
                     # If step has a task definition, use its properties
-                    task_type = "generic"
+                    task_type = current_step.task_template or "generic"
                     verify_fields = []
                     original_data = None
                     
@@ -166,7 +166,9 @@ def process_execution(execution):
                         task_title = current_step.task_definition.name
                         task_description = current_step.task_definition.description
                         task_form_fields = current_step.task_definition.form_fields
-                        task_type = current_step.task_definition.task_type
+                        # task_template takes precedence over task_definition.task_type
+                        if not current_step.task_template:
+                            task_type = current_step.task_definition.task_type
                         
                         # Extract verify_fields and new_field from form_fields
                         if task_form_fields:
@@ -219,8 +221,8 @@ def process_execution(execution):
                         task_description = current_step.description
                         task_form_fields = current_step.form_fields
 
-                        # If step has a task definition, use its properties
-                        task_type = "generic"
+                        # If step has a task template, use it to determine task type
+                        task_type = current_step.task_template or "generic"
                         verify_fields = []
                         original_data = None
                         
@@ -228,7 +230,9 @@ def process_execution(execution):
                             task_title = current_step.task_definition.name
                             task_description = current_step.task_definition.description
                             task_form_fields = current_step.task_definition.form_fields
-                            task_type = current_step.task_definition.task_type
+                            # task_template takes precedence over task_definition.task_type
+                            if not current_step.task_template:
+                                task_type = current_step.task_definition.task_type
                             
                             # Extract verify_fields and new_field from form_fields
                             if task_form_fields:
@@ -289,7 +293,7 @@ def process_execution(execution):
                         task_description = current_step.description
                         task_form_fields = current_step.form_fields
 
-                        task_type = "generic"
+                        task_type = current_step.task_template or "generic"
                         verify_fields = []
                         original_data = None
                         
@@ -297,7 +301,9 @@ def process_execution(execution):
                             task_title = current_step.task_definition.name
                             task_description = current_step.task_definition.description
                             task_form_fields = current_step.task_definition.form_fields
-                            task_type = current_step.task_definition.task_type
+                            # task_template takes precedence over task_definition.task_type
+                            if not current_step.task_template:
+                                task_type = current_step.task_definition.task_type
                             
                             # Extract verify_fields and new_field from form_fields
                             if task_form_fields:

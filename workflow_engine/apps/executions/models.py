@@ -231,8 +231,9 @@ class Task(models.Model):
         max_length=30,
         choices=(
             ("generic", "Generic Task"),
-            ("document_upload", "Uploading Documents"),
-            ("verify_data", "Verifying the Documents"),
+            ("document_upload", "Upload a new document"),
+            ("verify_data", "Verify existing details"),
+            ("edit_data", "Edit requested field data"),
             ("request_info", "Requesting Information"),
         ),
         default="generic"

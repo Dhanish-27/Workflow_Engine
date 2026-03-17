@@ -10,8 +10,9 @@ class TaskDefinition(models.Model):
     """
     TASK_TYPES = (
         ("generic", "Generic Task"),
-        ("document_upload", "Uploading Documents"),
-        ("verify_data", "Verifying the Documents"),
+        ("document_upload", "Upload a new document"),
+        ("verify_data", "Verify existing details"),
+        ("edit_data", "Edit requested field data"),
         ("request_info", "Requesting Information"),
     )
 
@@ -111,6 +112,19 @@ class Step(models.Model):
         null=True,
         blank=True,
         related_name="steps"
+    )
+
+    # Simple task template selection (document_upload, verify_data, edit_data)
+    task_template = models.CharField(
+        max_length=30,
+        choices=(
+            ("document_upload", "Upload a new document"),
+            ("verify_data", "Verify existing details"),
+            ("edit_data", "Edit requested field data"),
+        ),
+        blank=True,
+        default="",
+        help_text="Template type for auto-assigned tasks"
     )
 
     # Approval type determines which role can approve this step
