@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import useWorkflowStore from './workflowStore';
 
 // Helper to check if user is logged in from localStorage
 const getInitialAuthState = () => {

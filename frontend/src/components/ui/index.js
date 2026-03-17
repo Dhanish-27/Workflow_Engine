@@ -26,6 +26,10 @@ export {
 export { default as WorkflowVisualizer } from './WorkflowVisualizer';
 export { default as ExecutionTimeline } from './ExecutionTimeline';
 
+// Workflow Builder Components
+export { default as WorkflowBuilder } from './WorkflowBuilder';
+export { default as WorkflowNode } from './WorkflowNode';
+
 // Analytics Components
 export {
     AnalyticsWidget,

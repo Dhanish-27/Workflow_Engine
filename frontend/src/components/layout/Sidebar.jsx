@@ -18,6 +18,7 @@ import {
     ChevronRight,
     X,
     Plus,
+    PenTool,
 } from 'lucide-react';
 import { cn } from '../../utils';
 import { useUIStore, useAuthStore } from '../../store';
@@ -33,6 +34,7 @@ const menuGroups = [
             { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
             { label: 'Users', icon: Users, path: '/users', roles: ['admin'] },
             { label: 'Workflows', icon: GitBranch, path: '/workflows', roles: ['admin'] },
+            { label: 'Visual Builder', icon: PenTool, path: '/workflow-builder', roles: ['admin', 'manager', 'finance', 'ceo'] },
             { label: 'Steps', icon: ListOrdered, path: '/steps', roles: ['admin'] },
             { label: 'Rules', icon: BookOpen, path: '/rules', roles: ['admin'] },
         ]
@@ -41,6 +43,7 @@ const menuGroups = [
         title: 'Management',
         items: [
             { label: 'Executions', icon: PlayCircle, path: '/executions', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+            { label: 'Create Request', icon: Plus, path: '/create-request', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
             { label: 'Approvals', icon: CheckSquare, path: '/approvals', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
             { label: 'Tasks', icon: CheckCircle, path: '/tasks', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
             { label: 'Requests', icon: FileText, path: '/my-requests', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },

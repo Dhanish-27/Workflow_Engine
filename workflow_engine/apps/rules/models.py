@@ -162,11 +162,58 @@ class Rule(models.Model):
         Returns:
             bool: True if rule matches
         """
-        from .rule_engine import evaluate_condition
+        from .services.rule_engine import evaluate_condition
+        from apps.workflows.models import WorkflowField
         
         results = []
+        
+        # Build a mapping of field_id -> field_name for lookup
+        # The rule's conditions might store Field IDs while execution_data uses Field Names
+        field_id_to_name = {}
+        field_name_to_id = {}
+        
+        # Try to get workflow from step
+        workflow = None
+        if hasattr(self.step, 'workflow'):
+            workflow = self.step.workflow
+        elif hasattr(self.step, 'workflow_id'):
+            from apps.workflows.models import Workflow
+            try:
+                workflow = Workflow.objects.get(id=self.step.workflow_id)
+            except Workflow.DoesNotExist:
+                pass
+        
+        if workflow:
+            # Get all workflow fields to build mapping
+            workflow_fields = WorkflowField.objects.filter(workflow=workflow)
+            for wf in workflow_fields:
+                field_id_to_name[str(wf.id)] = wf.name
+                field_name_to_id[wf.name] = str(wf.id)
+        
         for condition in conditions:
-            actual_value = execution_data.get(condition.field_name)
+            field_name = condition.field_name
+            
+            # If field_name looks like a UUID, try to translate it to actual field name
+            # Check if the stored field_name is a UUID that needs translation
+            if field_name and len(field_name) == 36 and '-' in field_name:
+                # It's likely a UUID, try to look up the field name
+                if field_name in field_id_to_name:
+                    field_name = field_id_to_name[field_name]
+                else:
+                    # Try to look up by ID directly
+                    try:
+                        wf = WorkflowField.objects.get(id=field_name)
+                        field_name = wf.name
+                    except WorkflowField.DoesNotExist:
+                        pass
+            
+            # Get the actual value from execution_data
+            actual_value = execution_data.get(field_name)
+            
+            # If not found by field_name, try by field_id
+            if actual_value is None and field_name in field_name_to_id:
+                actual_value = execution_data.get(field_name_to_id[field_name])
+            
             result = evaluate_condition(condition, actual_value)
             results.append(result)
         

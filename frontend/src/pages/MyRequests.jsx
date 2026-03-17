@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, CheckCircle, XCircle, Clock, PlayCircle } from 'lucide-react';
+import { Eye, CheckCircle, XCircle, Clock, PlayCircle, Plus } from 'lucide-react';
 import { executionsAPI } from '../services/api';
 import { useAuthStore } from '../store';
 import { Button, Card, DataTable, Badge, EmptyState, Modal } from '../components/ui';
@@ -144,13 +144,19 @@ const MyRequests = () => {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-dark-text">
-                    My Requests
-                </h1>
-                <p className="text-gray-500 dark:text-dark-muted mt-1">
-                    Track the status of your workflow requests.
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-dark-text">
+                        My Requests
+                    </h1>
+                    <p className="text-gray-500 dark:text-dark-muted mt-1">
+                        Track the status of your workflow requests.
+                    </p>
+                </div>
+                <Button onClick={() => navigate('/create-request')}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Request
+                </Button>
             </div>
 
             <Card className="p-0">

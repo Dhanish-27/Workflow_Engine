@@ -5,6 +5,7 @@ export { default as Profile } from './Profile';
 export { default as Users } from './Users';
 export { default as Workflows } from './Workflows';
 export { default as WorkflowConfigure } from './WorkflowConfigure';
+export { default as WorkflowBuilderPage } from './WorkflowBuilder';
 export { default as Steps } from './Steps';
 export { default as Rules } from './Rules';
 export { default as Executions } from './Executions';

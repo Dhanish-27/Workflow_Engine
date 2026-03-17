@@ -12,6 +12,7 @@ import {
     Users,
     Workflows,
     WorkflowConfigure,
+    WorkflowBuilderPage,
     Steps,
     Rules,
     Executions,
@@ -74,6 +75,11 @@ function App() {
                     <Route path="/workflows/:id/configure" element={
                         <PrivateRoute allowedRoles={['admin']}>
                             <WorkflowConfigure />
+                        </PrivateRoute>
+                    } />
+                    <Route path="/workflow-builder" element={
+                        <PrivateRoute allowedRoles={['admin', 'manager', 'finance', 'ceo']}>
+                            <WorkflowBuilderPage />
                         </PrivateRoute>
                     } />
                     <Route path="/steps" element={

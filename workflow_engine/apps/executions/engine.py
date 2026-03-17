@@ -44,8 +44,9 @@ def get_next_step(step, data):
             default_rule = rule
             continue
             
-        # Use the safe evaluate method from rules/models.py
-        matches = rule.evaluate(data)
+        # Use the new evaluate_conditions method from rules/models.py
+        # This properly handles RuleCondition model objects and legacy JSON conditions
+        matches = rule.evaluate_conditions(data)
         results.append({"rule_id": str(rule.id), "result": matches})
         
         if matches:
