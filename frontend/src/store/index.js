@@ -123,11 +123,15 @@ export const useUIStore = create(
     persist(
         (set) => ({
             sidebarOpen: true,
+            sidebarCollapsed: false,
             darkMode: initialDarkMode,
             notifications: [],
 
             toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
             setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+            toggleSidebarCollapse: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+            setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 
             toggleDarkMode: () => set((state) => {
                 const newDarkMode = !state.darkMode;
@@ -162,6 +166,7 @@ export const useUIStore = create(
             name: 'ui-storage',
             partialize: (state) => ({
                 darkMode: state.darkMode,
+                sidebarCollapsed: state.sidebarCollapsed,
             }),
         }
     )

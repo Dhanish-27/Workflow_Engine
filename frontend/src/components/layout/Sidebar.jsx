@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
     Users,
@@ -7,110 +7,102 @@ import {
     ListOrdered,
     BookOpen,
     PlayCircle,
-    ClipboardList,
-    FileText,
+    ClipboardCheck,
     CheckSquare,
-    X,
-    DollarSign,
-    Award,
-    User,
-    Bell,
     CheckCircle,
+    FileText,
+    Bell,
+    User,
+    Settings,
+    ChevronLeft,
+    ChevronRight,
+    X,
     Plus,
 } from 'lucide-react';
 import { cn } from '../../utils';
 import { useUIStore, useAuthStore } from '../../store';
+import Avatar from '../ui/Avatar';
+import Tooltip from '../ui/Tooltip';
 import QuickTaskModal from '../QuickTaskModal';
 
-const adminMenuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/profile', icon: User, label: 'My Profile' },
-    { path: '/users', icon: Users, label: 'Users' },
-    { path: '/workflows', icon: GitBranch, label: 'Workflows' },
-    { path: '/steps', icon: ListOrdered, label: 'Steps' },
-    { path: '/rules', icon: BookOpen, label: 'Rules' },
-    { path: '/executions', icon: PlayCircle, label: 'Executions' },
-    { path: '/approvals', icon: CheckSquare, label: 'Approvals' },
-    { path: '/tasks', icon: CheckCircle, label: 'Tasks' },
-    { path: '/create-request', icon: FileText, label: 'Create Request' },
-    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
-    { path: '/notifications', icon: Bell, label: 'Notifications' },
+// Menu groups configuration
+const menuGroups = [
+    {
+        title: 'Core',
+        items: [
+            { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+            { label: 'Users', icon: Users, path: '/users', roles: ['admin'] },
+            { label: 'Workflows', icon: GitBranch, path: '/workflows', roles: ['admin'] },
+            { label: 'Steps', icon: ListOrdered, path: '/steps', roles: ['admin'] },
+            { label: 'Rules', icon: BookOpen, path: '/rules', roles: ['admin'] },
+        ]
+    },
+    {
+        title: 'Management',
+        items: [
+            { label: 'Executions', icon: PlayCircle, path: '/executions', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+            { label: 'Approvals', icon: CheckSquare, path: '/approvals', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+            { label: 'Tasks', icon: CheckCircle, path: '/tasks', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+            { label: 'Requests', icon: FileText, path: '/my-requests', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+        ]
+    },
+    {
+        title: 'Activity',
+        items: [
+            { label: 'Notifications', icon: Bell, path: '/notifications', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+            { label: 'Profile', icon: User, path: '/profile', roles: ['admin', 'manager', 'finance', 'ceo', 'employee'] },
+        ]
+    },
 ];
 
-const managerMenuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/profile', icon: User, label: 'My Profile' },
-    { path: '/approvals', icon: CheckSquare, label: 'My Approvals' },
-    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
-    { path: '/executions', icon: PlayCircle, label: 'Execution History' },
-    { path: '/create-request', icon: FileText, label: 'Create Request' },
-    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
-    { path: '/notifications', icon: Bell, label: 'Notifications' },
-];
+// Role-based menu items helper
+const getMenuItemsForRole = (role) => {
+    const filteredGroups = menuGroups.map(group => ({
+        ...group,
+        items: group.items.filter(item => item.roles.includes(role))
+    })).filter(group => group.items.length > 0);
 
-const financeMenuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/profile', icon: User, label: 'My Profile' },
-    { path: '/approvals', icon: DollarSign, label: 'Finance Approvals' },
-    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
-    { path: '/executions', icon: PlayCircle, label: 'Execution History' },
-    { path: '/create-request', icon: FileText, label: 'Create Request' },
-    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
-    { path: '/notifications', icon: Bell, label: 'Notifications' },
-];
-
-const ceoMenuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/profile', icon: User, label: 'My Profile' },
-    { path: '/approvals', icon: Award, label: 'Final Approvals' },
-    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
-    { path: '/executions', icon: PlayCircle, label: 'Execution History' },
-    { path: '/create-request', icon: FileText, label: 'Create Request' },
-    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
-    { path: '/notifications', icon: Bell, label: 'Notifications' },
-];
-
-const employeeMenuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/profile', icon: User, label: 'My Profile' },
-    { path: '/tasks', icon: CheckCircle, label: 'My Tasks' },
-    { path: '/create-request', icon: FileText, label: 'Create Request' },
-    { path: '/my-requests', icon: ClipboardList, label: 'My Requests' },
-    { path: '/notifications', icon: Bell, label: 'Notifications' },
-];
+    return filteredGroups;
+};
 
 const Sidebar = () => {
-    const { sidebarOpen, toggleSidebar } = useUIStore();
+    const { sidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useUIStore();
     const { user, getRoleDisplayName } = useAuthStore();
     const [isQuickTaskOpen, setIsQuickTaskOpen] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+    const location = useLocation();
 
     const role = user?.role || 'employee';
+    const menuItems = getMenuItemsForRole(role);
 
-    // Get menu items based on role
-    let menuItems;
-    switch (role) {
-        case 'admin':
-            menuItems = adminMenuItems;
-            break;
-        case 'manager':
-            menuItems = managerMenuItems;
-            break;
-        case 'finance':
-            menuItems = financeMenuItems;
-            break;
-        case 'ceo':
-            menuItems = ceoMenuItems;
-            break;
-        default:
-            menuItems = employeeMenuItems;
-    }
+    // Check for mobile viewport
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 1024);
+        };
+
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
+    // Handle close on mobile when clicking a link
+    const handleNavClick = () => {
+        if (isMobile) {
+            toggleSidebar();
+        }
+    };
+
+    // Sidebar width classes
+    const sidebarWidth = sidebarCollapsed ? 'w-20' : 'w-72';
+    const collapsedWidth = 'w-20';
 
     return (
         <>
             {/* Mobile overlay */}
-            {sidebarOpen && (
+            {sidebarOpen && isMobile && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden animate-fade-in"
                     onClick={toggleSidebar}
                 />
             )}
@@ -118,82 +110,223 @@ const Sidebar = () => {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    'fixed top-0 left-0 z-50 h-full w-64 glass dark:glass-dark border-r border-gray-200/50 dark:border-dark-border/50 transition-transform duration-300 ease-out lg:translate-x-0 backdrop-blur-xl',
-                    sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                    'fixed top-0 left-0 z-50 h-full transition-all duration-300 ease-out',
+                    // Base styles
+                    'bg-white dark:bg-dark-card border-r border-gray-200/80 dark:border-dark-border/50',
+                    // Width and transform
+                    isMobile
+                        ? `${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-72`
+                        : `${sidebarWidth} lg:translate-x-0`,
+                    // Shadow
+                    'shadow-xl dark:shadow-dark-bg/50',
+                    // Rounded on mobile
+                    isMobile && 'rounded-none'
                 )}
             >
-                <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200/50 dark:border-dark-border/50">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center shadow-lg shadow-primary-500/30">
+                {/* Header */}
+                <div className={cn(
+                    'flex items-center h-16 px-4 border-b border-gray-200/80 dark:border-dark-border/50',
+                    sidebarCollapsed && !isMobile ? 'justify-center' : 'justify-between'
+                )}>
+                    {/* Logo */}
+                    <div className={cn(
+                        'flex items-center gap-3',
+                        sidebarCollapsed && !isMobile ? 'justify-center w-full' : ''
+                    )}>
+                        <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/30">
                             <GitBranch className="w-5 h-5 text-white" />
                         </div>
-                        <span className="text-lg font-bold text-gray-900 dark:text-dark-text">
-                            Workflow
-                        </span>
+                        {(!sidebarCollapsed || isMobile) && (
+                            <div className="flex flex-col">
+                                <span className="text-lg font-bold bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-400 dark:to-primary-500 bg-clip-text text-transparent">
+                                    Workflow
+                                </span>
+                                <span className="text-xs text-gray-500 dark:text-dark-muted -mt-0.5">
+                                    Engine
+                                </span>
+                            </div>
+                        )}
                     </div>
-                    <button
-                        onClick={toggleSidebar}
-                        className="p-1.5 rounded-lg lg:hidden text-gray-500 hover:text-gray-700 hover:bg-gray-100/80 dark:hover:bg-dark-border/50 transition-all duration-200 hover-lift"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+
+                    {/* Mobile close button */}
+                    {isMobile && (
+                        <button
+                            onClick={toggleSidebar}
+                            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100/80 dark:hover:bg-dark-border/50 transition-all duration-200"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    )}
                 </div>
 
-                <nav className="p-4 space-y-1">
-                    {menuItems.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            onClick={() => window.innerWidth < 1024 && toggleSidebar()}
-                            className={({ isActive }) =>
-                                cn(
-                                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                                    isActive
-                                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30'
-                                        : 'text-gray-700 dark:text-dark-muted hover:bg-gray-100/80 dark:hover:bg-dark-border/50 hover-lift'
-                                )
-                            }
-                        >
-                            <item.icon className="w-5 h-5 flex-shrink-0" />
-                            <span className="flex-1">{item.label}</span>
-                            {item.path === '/tasks' && user?.role === 'admin' && (
-                                <button
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setIsQuickTaskOpen(true);
-                                    }}
-                                    className="p-1 hover:bg-white/20 rounded-md transition-colors"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                </button>
+                {/* Navigation */}
+                <nav className={cn(
+                    'flex flex-col h-[calc(100vh-8rem)] overflow-y-auto py-4 px-3',
+                    sidebarCollapsed && !isMobile ? 'px-2' : 'px-3'
+                )}>
+                    {menuItems.map((group, groupIndex) => (
+                        <div key={group.title} className={cn(
+                            groupIndex > 0 && 'mt-6'
+                        )}>
+                            {/* Section Header */}
+                            {(!sidebarCollapsed || isMobile) && (
+                                <h3 className="px-3 mb-2 text-xs font-semibold text-gray-400 dark:text-dark-muted uppercase tracking-wider">
+                                    {group.title}
+                                </h3>
                             )}
-                        </NavLink>
+
+                            {/* Menu Items */}
+                            <div className="space-y-1">
+                                {group.items.map((item) => {
+                                    const isActive = location.pathname === item.path;
+                                    const showTooltip = sidebarCollapsed && !isMobile;
+
+                                    const linkContent = (
+                                        <NavLink
+                                            key={item.path}
+                                            to={item.path}
+                                            onClick={handleNavClick}
+                                            className={cn(
+                                                'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
+                                                // Active state
+                                                isActive
+                                                    ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                                                    : 'text-gray-600 dark:text-dark-muted hover:bg-gray-100/80 dark:hover:bg-dark-border/40 hover:text-gray-900 dark:hover:text-dark-text',
+                                                // Collapsed state
+                                                sidebarCollapsed && !isMobile && 'justify-center px-2'
+                                            )}
+                                        >
+                                            {/* Active indicator */}
+                                            {isActive && (
+                                                <div className="absolute left-0 w-1 h-8 bg-primary-500 rounded-r-full" />
+                                            )}
+
+                                            {/* Icon */}
+                                            <item.icon className={cn(
+                                                'w-5 h-5 flex-shrink-0 transition-transform duration-200',
+                                                isActive
+                                                    ? 'text-primary-600 dark:text-primary-400'
+                                                    : 'text-gray-400 dark:text-dark-muted group-hover:text-primary-500 dark:group-hover:text-primary-400 group-hover:scale-110',
+                                                sidebarCollapsed && !isMobile && 'w-5 h-5'
+                                            )} />
+
+                                            {/* Label */}
+                                            {(!sidebarCollapsed || isMobile) && (
+                                                <>
+                                                    <span className="flex-1 truncate">{item.label}</span>
+
+                                                    {/* Quick add button for Tasks */}
+                                                    {item.path === '/tasks' && user?.role === 'admin' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setIsQuickTaskOpen(true);
+                                                            }}
+                                                            className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-primary-100 dark:hover:bg-primary-900/50 text-primary-600 dark:text-primary-400 transition-all duration-200"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </NavLink>
+                                    );
+
+                                    // Wrap with tooltip when collapsed
+                                    if (showTooltip) {
+                                        return (
+                                            <Tooltip
+                                                key={item.path}
+                                                content={item.label}
+                                                placement="right"
+                                                theme="dark"
+                                            >
+                                                {linkContent}
+                                            </Tooltip>
+                                        );
+                                    }
+
+                                    return linkContent;
+                                })}
+                            </div>
+
+                            {/* Section divider */}
+                            {groupIndex < menuItems.length - 1 && (!sidebarCollapsed || isMobile) && (
+                                <div className="mt-4 mx-3 border-t border-gray-200/60 dark:border-dark-border/40" />
+                            )}
+                        </div>
                     ))}
                 </nav>
 
-                <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200/50 dark:border-dark-border/50 bg-gray-50/30 dark:bg-dark-border/20">
-                    <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100/80 dark:hover:bg-dark-border/50 transition-all duration-200 hover-lift">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-md">
-                            <span className="text-xs font-medium text-white">
-                                {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                            </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-dark-text truncate">
-                                {user?.name || user?.email || 'User'}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-dark-muted truncate">
-                                {getRoleDisplayName()}
-                            </p>
+                {/* Footer with collapse toggle and user profile */}
+                <div className={cn(
+                    'absolute bottom-0 left-0 right-0 border-t border-gray-200/80 dark:border-dark-border/50',
+                    'bg-white/80 dark:bg-dark-card/80 backdrop-blur-xl'
+                )}>
+                    {/* Collapse toggle button (desktop only) */}
+                    {!isMobile && (
+                        <button
+                            onClick={toggleSidebarCollapse}
+                            className={cn(
+                                'w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-500 dark:text-dark-muted hover:text-gray-700 dark:hover:text-dark-text hover:bg-gray-100/80 dark:hover:bg-dark-border/40 transition-all duration-200',
+                                sidebarCollapsed && 'justify-center'
+                            )}
+                        >
+                            {sidebarCollapsed ? (
+                                <ChevronRight className="w-5 h-5" />
+                            ) : (
+                                <>
+                                    <ChevronLeft className="w-5 h-5" />
+                                    <span>Collapse</span>
+                                </>
+                            )}
+                        </button>
+                    )}
+
+                    {/* User profile section */}
+                    <div className={cn(
+                        'px-3 py-3',
+                        sidebarCollapsed && !isMobile ? 'px-2' : 'px-3'
+                    )}>
+                        <div className={cn(
+                            'flex items-center gap-3 p-2 rounded-xl hover:bg-gray-100/80 dark:hover:bg-dark-border/40 transition-all duration-200 cursor-pointer',
+                            sidebarCollapsed && !isMobile && 'justify-center'
+                        )}>
+                            {/* Avatar */}
+                            <Avatar
+                                name={user?.name || user?.email}
+                                size="sm"
+                                className="ring-2 ring-primary-500/20 dark:ring-primary-400/20"
+                            />
+
+                            {/* User info */}
+                            {(!sidebarCollapsed || isMobile) && (
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-dark-text truncate">
+                                        {user?.name || user?.email || 'User'}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-dark-muted truncate">
+                                        {getRoleDisplayName()}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Settings icon for collapsed state */}
+                            {(!sidebarCollapsed || isMobile) && (
+                                <button className="p-2 rounded-lg text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100/80 dark:hover:bg-dark-border/50 transition-all duration-200">
+                                    <Settings className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
             </aside>
 
-            <QuickTaskModal 
-                isOpen={isQuickTaskOpen} 
-                onClose={() => setIsQuickTaskOpen(false)} 
+            {/* Quick Task Modal */}
+            <QuickTaskModal
+                isOpen={isQuickTaskOpen}
+                onClose={() => setIsQuickTaskOpen(false)}
             />
         </>
     );

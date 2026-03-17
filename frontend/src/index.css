@@ -3,8 +3,75 @@
 @tailwind utilities;
 
 @layer base {
+    :root {
+        /* Brand colors */
+        --color-primary: 99 102 241;
+        --color-primary-light: 129 140 248;
+        --color-primary-dark: 79 70 229;
+
+        /* Surface colors - Light mode */
+        --color-surface-50: 248 250 252;
+        --color-surface-100: 241 245 249;
+        --color-surface-200: 226 232 240;
+        --color-surface-300: 203 213 225;
+        --color-surface-700: 51 65 85;
+        --color-surface-800: 30 41 59;
+        --color-surface-900: 15 23 42;
+
+        /* Background colors */
+        --color-bg: 255 255 255;
+        --color-bg-secondary: 241 245 249;
+        --color-bg-tertiary: 226 232 240;
+
+        /* Text colors */
+        --color-text: 15 23 42;
+        --color-text-muted: 100 116 139;
+
+        /* Border colors */
+        --color-border: 226 232 240;
+        --color-border-light: 203 213 225;
+
+        /* Focus ring */
+        --focus-ring-color: rgba(99, 102, 241, 0.4);
+
+        /* Shadows */
+        --shadow-soft: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 16px -4px rgba(0, 0, 0, 0.1);
+        --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.25);
+    }
+
+    .dark {
+        /* Surface colors - Dark mode */
+        --color-surface-50: 15 23 42;
+        --color-surface-100: 30 41 59;
+        --color-surface-200: 51 65 85;
+        --color-surface-300: 71 85 105;
+        --color-surface-700: 203 213 225;
+        --color-surface-800: 241 245 249;
+        --color-surface-900: 248 250 252;
+
+        /* Background colors */
+        --color-bg: 15 23 42;
+        --color-bg-secondary: 30 41 59;
+        --color-bg-tertiary: 51 65 85;
+
+        /* Text colors */
+        --color-text: 248 250 252;
+        --color-text-muted: 148 163 184;
+
+        /* Border colors */
+        --color-border: 51 65 85;
+        --color-border-light: 71 85 105;
+
+        /* Focus ring - slightly brighter for dark mode */
+        --focus-ring-color: rgba(129, 140, 248, 0.4);
+
+        /* Shadows - lighter for dark mode */
+        --shadow-soft: 0 2px 8px -2px rgba(0, 0, 0, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.4);
+        --shadow-glow: 0 0 20px rgba(129, 140, 248, 0.35);
+    }
+
     body {
-        @apply bg-white text-black dark:bg-black dark:text-white font-sans;
+        @apply bg-white text-slate-900 dark:bg-dark-bg dark:text-dark-text font-sans antialiased;
         @apply transition-colors duration-300;
     }
 
@@ -17,44 +84,100 @@
 }
 
 @layer components {
+
+    /* Base button styles */
     .btn {
-        @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+        @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200;
+        @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+        @apply disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed;
+        @apply active:scale-[0.98] transform-gpu;
     }
 
+    /* Primary button with gradient */
     .btn-primary {
-        @apply btn bg-black text-white hover:bg-neutral-800 focus:ring-neutral-500 dark:bg-white dark:text-black dark:hover:bg-neutral-200 dark:focus:ring-neutral-400;
+        @apply btn;
+        @apply bg-gradient-to-r from-primary-500 to-primary-600 text-white;
+        @apply hover:from-primary-600 hover:to-primary-700 hover:shadow-glow;
+        @apply focus:ring-primary-500 focus:ring-offset-white dark:focus:ring-offset-dark-bg;
     }
 
+    /* Secondary button */
     .btn-secondary {
-        @apply btn bg-neutral-100 text-black hover:bg-neutral-200 focus:ring-neutral-400 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800 dark:focus:ring-neutral-600;
+        @apply btn;
+        @apply bg-surface-100 text-slate-700 dark:bg-dark-card dark:text-dark-text dark:border dark:border-dark-border;
+        @apply hover:bg-surface-200 dark:hover:bg-dark-cardHover;
+        @apply focus:ring-primary-500;
     }
 
-    .btn-danger {
-        @apply btn bg-neutral-900 text-white hover:bg-black focus:ring-neutral-700 dark:bg-neutral-100 dark:text-black dark:hover:bg-white dark:focus:ring-neutral-300;
-    }
-
+    /* Ghost button */
     .btn-ghost {
-        @apply btn bg-transparent hover:bg-neutral-50 dark:hover:bg-neutral-950 text-black dark:text-white;
+        @apply btn;
+        @apply bg-transparent text-slate-700 dark:text-dark-text;
+        @apply hover:bg-surface-100 dark:hover:bg-dark-cardHover;
     }
 
+    /* Danger button */
+    .btn-danger {
+        @apply btn;
+        @apply bg-gradient-to-r from-danger-500 to-danger-600 text-white;
+        @apply hover:from-danger-600 hover:to-danger-700;
+        @apply focus:ring-danger-500 focus:ring-offset-white dark:focus:ring-offset-dark-bg;
+    }
+
+    /* Outline button */
+    .btn-outline {
+        @apply btn;
+        @apply border-2 border-primary-500 text-primary-600 dark:text-primary-400;
+        @apply hover:bg-primary-50 dark:hover:bg-primary-900/20;
+        @apply focus:ring-primary-500;
+    }
+
+    /* Card base */
     .card {
-        @apply rounded-xl bg-white shadow-sm border border-neutral-200 dark:bg-black dark:border-neutral-800;
+        @apply rounded-2xl bg-white dark:bg-dark-card;
+        @apply border border-surface-200 dark:border-dark-border;
+        @apply shadow-soft;
     }
 
-    /* Glassmorphism utilities */
+    /* Glassmorphism */
     .glass {
-        @apply bg-white/70 dark:bg-black/70 backdrop-blur-md border border-white/20 dark:border-white/10;
+        @apply bg-white/70 dark:bg-dark-card/70 backdrop-blur-xl border border-white/20 dark:border-white/10;
     }
 
     .glass-light {
-        @apply bg-white/40 backdrop-blur-sm border border-white/20;
+        @apply bg-white/40 backdrop-blur-lg border border-white/30;
     }
 
     .glass-dark {
-        @apply bg-black/60 backdrop-blur-md border border-white/5;
+        @apply bg-dark-bg/80 backdrop-blur-lg border border-white/5;
     }
 
-    /* Hover transition utilities */
+    /* Gradient borders */
+    .gradient-border {
+        position: relative;
+        background: inherit;
+    }
+
+    .gradient-border::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-primary-light)));
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .gradient-border:hover::before {
+        opacity: 1;
+    }
+
+    /* Hover effects */
     .hover-lift {
         @apply transition-transform duration-200 ease-out hover:-translate-y-1;
     }
@@ -64,16 +187,29 @@
     }
 
     .hover-glow {
-        @apply transition-shadow duration-200 ease-out hover:shadow-md;
+        @apply transition-shadow duration-200 ease-out hover:shadow-glow;
     }
 
-    /* Focus ring animation */
+    /* Focus ring */
     .focus-ring {
-        @apply focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2;
+        @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+        @apply dark:focus:ring-offset-dark-bg;
     }
 
-    .focus-ring-dark {
-        @apply focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:ring-offset-black;
+    /* Input base */
+    .input-base {
+        @apply w-full rounded-xl border bg-white px-4 py-2.5 text-sm;
+        @apply border-surface-300 dark:border-dark-border;
+        @apply text-slate-900 dark:text-dark-text;
+        @apply placeholder:text-slate-400 dark:placeholder:text-dark-muted;
+        @apply transition-all duration-200;
+        @apply focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500;
+        @apply dark:bg-dark-card dark:focus:border-primary-400;
+    }
+
+    /* Badge base */
+    .badge {
+        @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
     }
 }
 
@@ -84,38 +220,38 @@
 }
 
 ::-webkit-scrollbar-track {
-    @apply bg-neutral-50 dark:bg-black;
+    @apply bg-surface-100 dark:bg-dark-bg;
 }
 
 ::-webkit-scrollbar-thumb {
-    @apply bg-neutral-300 dark:bg-neutral-800 rounded-full;
+    @apply bg-surface-300 dark:bg-dark-border rounded-full;
     transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    @apply bg-neutral-400 dark:bg-neutral-700;
+    @apply bg-surface-400 dark:bg-dark-borderLight;
 }
 
 /* Enhanced dark mode scrollbar */
 .dark ::-webkit-scrollbar-thumb {
-    background: #262626;
+    background: #334155;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-    background: #404040;
+    background: #475569;
 }
 
 /* React Flow customization */
 .react-flow__node {
-    @apply rounded-lg shadow-md;
+    @apply rounded-xl shadow-soft;
 }
 
 .react-flow__edge-path {
-    @apply stroke-neutral-400 dark:stroke-neutral-600;
+    @apply stroke-surface-400 dark:stroke-dark-muted;
 }
 
 .react-flow__controls {
-    @apply rounded-lg overflow-hidden shadow-md;
+    @apply rounded-xl overflow-hidden shadow-soft-md;
 }
 
 /* Animations */
@@ -135,7 +271,6 @@
     animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Fade in animation */
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -150,7 +285,6 @@
     animation: fadeIn 0.3s ease-in-out;
 }
 
-/* Slide up animation */
 @keyframes slideUp {
     from {
         opacity: 0;
@@ -167,7 +301,6 @@
     animation: slideUp 0.3s ease-out;
 }
 
-/* Slide down animation */
 @keyframes slideDown {
     from {
         opacity: 0;
@@ -184,7 +317,6 @@
     animation: slideDown 0.3s ease-out;
 }
 
-/* Scale in animation */
 @keyframes scaleIn {
     from {
         opacity: 0;
@@ -236,7 +368,7 @@
     animation: ripple 0.6s ease-out;
 }
 
-/* Smooth transitions for interactive elements */
+/* Smooth transitions */
 .transition-smooth {
     @apply transition-all duration-200 ease-out;
 }
@@ -247,19 +379,6 @@
 
 .transition-smooth-slow {
     @apply transition-all duration-300 ease-out;
-}
-
-/* Focus animation */
-/* Focus animation (handled below with CSS variables) */
-
-/* For dark mode, we'll use a different class or rely on the same animation but it might be less visible. 
-   Actually, it's better to just have one focusPulse that looks okay in both or use a variable. */
-:root {
-    --focus-ring-color: rgba(0, 0, 0, 0.2);
-}
-
-.dark {
-    --focus-ring-color: rgba(255, 255, 255, 0.2);
 }
 
 @keyframes focusPulse {
@@ -280,7 +399,6 @@
     animation: focusPulse 1s infinite;
 }
 
-/* Float animation */
 @keyframes float {
 
     0%,
@@ -297,7 +415,6 @@
     animation: float 3s ease-in-out infinite;
 }
 
-/* Shimmer effect for loading states */
 @keyframes shimmer {
     0% {
         background-position: -200% 0;
@@ -317,7 +434,14 @@
     animation: shimmer 1.5s infinite;
 }
 
-/* Bounce animation */
+.dark .animate-shimmer {
+    background: linear-gradient(90deg,
+            rgba(30, 41, 59, 0) 0%,
+            rgba(71, 85, 105, 0.3) 50%,
+            rgba(30, 41, 59, 0) 100%);
+    background-size: 200% 100%;
+}
+
 @keyframes bounce-subtle {
 
     0%,
@@ -334,16 +458,15 @@
     animation: bounce-subtle 2s ease-in-out infinite;
 }
 
-/* Pulse border animation */
 @keyframes pulseBorder {
 
     0%,
     100% {
-        border-color: rgba(14, 165, 233, 0.3);
+        border-color: rgba(99, 102, 241, 0.3);
     }
 
     50% {
-        border-color: rgba(14, 165, 233, 0.6);
+        border-color: rgba(99, 102, 241, 0.6);
     }
 }
 
@@ -386,4 +509,123 @@
 
 .stagger-children>*:nth-child(8) {
     animation-delay: 350ms;
+}
+
+/* Skeleton loading pulse */
+@keyframes skeleton-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.animate-skeleton {
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+    background: linear-gradient(90deg,
+            rgb(var(--color-surface-200)) 0%,
+            rgb(var(--color-surface-100)) 50%,
+            rgb(var(--color-surface-200)) 100%);
+    background-size: 200% 100%;
+}
+
+.dark .animate-skeleton {
+    background: linear-gradient(90deg,
+            rgb(var(--color-surface-700)) 0%,
+            rgb(var(--color-surface-800)) 50%,
+            rgb(var(--color-surface-700)) 100%);
+    background-size: 200% 100%;
+}
+
+/* Tooltip arrow */
+.tooltip-arrow {
+    @apply absolute w-2 h-2 bg-dark-card dark:bg-surface-800 rotate-45;
+}
+
+/* Progress bar striped animation */
+@keyframes progress-stripe {
+    0% {
+        background-position: 1rem 0;
+    }
+
+    100% {
+        background-position: 0 0;
+    }
+}
+
+.progress-striped {
+    background-image: linear-gradient(45deg,
+            rgba(255, 255, 255, 0.15) 25%,
+            transparent 25%,
+            transparent 50%,
+            rgba(255, 255, 255, 0.15) 50%,
+            rgba(255, 255, 255, 0.15) 75%,
+            transparent 75%,
+            transparent);
+    background-size: 1rem 1rem;
+    animation: progress-stripe 1s linear infinite;
+}
+
+/* Dropdown menu animation */
+@keyframes dropdown-open {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes dropdown-close {
+    from {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.95) translateY(-8px);
+    }
+}
+
+.dropdown-open {
+    animation: dropdown-open 0.2s ease-out forwards;
+}
+
+.dropdown-close {
+    animation: dropdown-close 0.15s ease-in forwards;
+}
+
+/* Tab indicator animation */
+@keyframes tab-indicator {
+    from {
+        transform: scaleX(0);
+    }
+
+    to {
+        transform: scaleX(1);
+    }
+}
+
+.tab-indicator {
+    animation: tab-indicator 0.3s ease-out forwards;
+}
+
+/* Gradient text */
+.gradient-text {
+    @apply bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary-500 to-secondary-500;
+}
+
+/* Focus visible for accessibility */
+.focus-visible-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2;
+    @apply dark:focus-visible:ring-offset-dark-bg;
 }
