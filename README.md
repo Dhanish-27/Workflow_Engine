@@ -23,7 +23,6 @@ A powerful, graph-based workflow automation system built with Django and React. 
 - [Getting Started](#getting-started)
 - [API Endpoints](#api-endpoints)
 - [Project Structure](#project-structure)
-- [Flowchart](#flowchart)
 
 ---
 
@@ -47,10 +46,9 @@ This is a **Role-Based Workflow Automation System** that allows organizations to
 | **Backend** | Django 5.0+ |
 | **API Framework** | Django REST Framework |
 | **Authentication** | JWT (Simple JWT) |
-| **Frontend** | React 18+ |
+| **Frontend** | React  |
 | **UI Framework** | Tailwind CSS |
 | **Database** | PostgreSQL / SQLite (development) |
-| **State Management** | Zustand |
 | **Email** | Django Email Backend |
 
 ---
@@ -112,22 +110,6 @@ The condition evaluator supports the following operators:
 | `after` | - | Date is after |
 
 **Logical Operators**: `AND` / `OR` for combining multiple conditions
-
-### 5. Loop Support
-
-Steps can repeat based on workflow data conditions:
-
-- Steps can loop back to previous steps
-- Useful for approval retry loops
-- Task reassignment scenarios
-
-### 6. Loop Safety
-
-To prevent infinite loops, the system implements safety limits:
-
-- **Max 5 iterations** per step (loop limit)
-- **Max 50 total steps** per execution
-- Workflow fails if limits exceeded
 
 ---
 
@@ -364,12 +346,7 @@ The workflow execution follows a graph-based traversal algorithm:
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000/api/
 
-### Docker Setup (Alternative)
 
-```bash
-# Using docker-compose
-docker-compose up -d
-```
 
 ---
 
@@ -523,47 +500,7 @@ HALLEYX/
 
 ---
 
-## 📊 Flowchart
 
-Here's a sample workflow flowchart showing a typical approval process:
-
-```mermaid
-graph TD
-    A([Start: Employee Request]) --> B{Manager Approval}
-    
-    B -->|amount > 1000| C[CEO Approval]
-    B -->|amount <= 1000| D{Finance Approval}
-    
-    D -->|needs_correction == true| E[Task: Fix Details]
-    E -->|completed == false| D
-    E -->|completed == true| C
-    
-    C -->|approved| F[End: Notification]
-    C -->|rejected| G[End: Rejection Notice]
-    
-    B -->|rejected| G
-    D -->|rejected| G
-    
-    style A fill:#e1f5fe
-    style F fill:#c8e6c9
-    style G fill:#ffcdd2
-    style C fill:#fff9c4
-    style E fill:#f3e5f5
-```
-
-### Flow Explanation
-
-1. **Employee submits request** → Workflow starts
-2. **Manager Approval** → 
-   - If `amount > 1000` → Escalate to CEO
-   - If `amount <= 1000` → Send to Finance
-3. **Finance Approval** →
-   - If `needs_correction == true` → Loop to Task step
-   - If completed → Continue to CEO
-4. **CEO Approval** → Final decision
-5. **End** → Send appropriate notification
-
----
 
 ## 🔐 Security Features
 
@@ -586,7 +523,7 @@ DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Database
-DATABASE_URL=postgres://user:password@localhost:5432/workflow_db
+DATABASE_URL=postgres://user:password@localhost:5432/workflow_db ( Optional )
 
 # Email Settings
 EMAIL_HOST=smtp.example.com
@@ -597,31 +534,3 @@ EMAIL_USE_TLS=True
 DEFAULT_FROM_EMAIL=noreply@example.com
 ```
 
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is proprietary software. All rights reserved.
-
----
-
-## 🙏 Acknowledgments
-
-- Django REST Framework
-- Simple JWT
-- React
-- Tailwind CSS
-
----
-
-**Built with ❤️ using Django and React**
