@@ -625,18 +625,36 @@ const Tasks = () => {
                     <div className="p-8 text-center text-gray-500 dark:text-dark-muted">
                         Loading tasks...
                     </div>
-                ) : (activeTab === 'pending' ? pendingTasks : taskHistory).length === 0 ? (
-                    <EmptyState
-                        icon={CheckCircle}
-                        title={activeTab === 'pending' ? "No pending tasks" : "No task history"}
-                        description={activeTab === 'pending' ? "You're all caught up! No tasks require your attention." : "You haven't completed any tasks yet."}
-                    />
-                ) : (
-                    <DataTable
-                        columns={activeTab === 'templates' ? templateColumns : columns}
-                        data={activeTab === 'pending' ? pendingTasks : activeTab === 'history' ? taskHistory : taskDefinitions}
-                    />
-                )}
+                ) : (() => {
+                    const data = activeTab === 'pending' ? pendingTasks :
+                                 activeTab === 'history' ? taskHistory :
+                                 taskDefinitions;
+                    
+                    if (data.length === 0) {
+                        return (
+                            <EmptyState
+                                icon={activeTab === 'templates' ? Settings : CheckCircle}
+                                title={
+                                    activeTab === 'pending' ? "No pending tasks" :
+                                    activeTab === 'history' ? "No task history" :
+                                    "No task templates"
+                                }
+                                description={
+                                    activeTab === 'pending' ? "You're all caught up! No tasks require your attention." :
+                                    activeTab === 'history' ? "You haven't completed any tasks yet." :
+                                    "No task templates have been created yet."
+                                }
+                            />
+                        );
+                    }
+
+                    return (
+                        <DataTable
+                            columns={activeTab === 'templates' ? templateColumns : columns}
+                            data={data}
+                        />
+                    );
+                })()}
             </Card>
 
             <Modal
