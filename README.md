@@ -1,5 +1,8 @@
 # Workflow Engine - Role-Based Workflow Automation System
 
+> 🎬 **Check out the live demo of the project below!**
+
+[![Watch Demo](https://img.shields.io/badge/Watch-Demo-red?style=for-the-badge&logo=youtube)](https://youtu.be/R486nuO6xaw?si=VJ5MUXUUIBVV6RQi)
 
 
 
@@ -11,7 +14,6 @@
   <img src="https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql" alt="PostgreSQL">
 </p>
 
-[![Watch Demo](https://img.shields.io/badge/Watch-Demo-red?style=for-the-badge&logo=youtube)](https://youtu.be/R486nuO6xaw?si=VJ5MUXUUIBVV6RQi)
 
 A powerful, graph-based workflow automation system built with Django and React. This system enables dynamic creation and execution of multi-step workflows with role-based access control, condition evaluation, and visual workflow building.
 
