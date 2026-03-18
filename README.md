@@ -12,18 +12,6 @@ A powerful, graph-based workflow automation system built with Django and React. 
 
 ---
 
-## 📋 Table of Contents
-
-- [Project Overview](#project-overview)
-- [Tech Stack](#tech-stack)
-- [Core Features](#core-features)
-- [Architecture](#architecture)
-- [User Roles & Permissions](#user-roles--permissions)
-- [Workflow Execution Flow](#workflow-execution-flow)
-- [Getting Started](#getting-started)
-- [API Endpoints](#api-endpoints)
-
----
 
 ## 🚀 Project Overview
 
