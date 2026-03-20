@@ -38,7 +38,7 @@ class RuleSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'step', 'step_name', 'condition', 'logical_operator',
             'next_step', 'next_step_name', 'priority', 
-            'is_default', 'created_at', 'updated_at', 'conditions'
+            'is_default', 'is_end_rule', 'rule_type', 'created_at', 'updated_at', 'conditions'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     

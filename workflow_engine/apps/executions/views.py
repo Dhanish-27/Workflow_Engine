@@ -21,6 +21,7 @@ from .permissions import (
     CanViewApprovalTasks,
 )
 from .engine import get_next_step, process_execution
+from .models import Task
 from apps.notifications.services import (
     notify_approval_required,
     notify_approved,
@@ -105,8 +106,17 @@ class ExecutionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
+        """
+        Handle approval actions with three options:
+        - action="approve": Accept the workflow, move to next step based on rules
+        - action="reject": Fail the workflow
+        - action="request_change": Assign a task to the requester (submit docs, lower amount, etc.)
+        """
         execution = self.get_object()
         user = request.user
+        
+        # Get the action type from request data
+        action = request.data.get("action", "approve")
         
         # Safety check: Only approval steps can be approved via this endpoint
         if execution.current_step and execution.current_step.step_type != "approval":
@@ -143,23 +153,63 @@ class ExecutionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-        # Create StepApproval record
-        StepApproval.objects.create(
-            execution=execution,
-            step=execution.current_step,
-            approved_by=user,
-            action="approve",
-            comment=request.data.get("comment", "")
-        )
-
-        # Get the next step using the workflow engine before we notify
         current_step = execution.current_step
         if not current_step:
             return Response(
                 {"error": "No current step to approve"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        next_step, evaluated_rules = get_next_step(current_step, execution.data)
+
+        # Handle different actions
+        if action == "approve":
+            # ACCEPT: Move to next step based on rules
+            return self._handle_approve(execution, user, current_step, request)
+        elif action == "reject":
+            # FAIL: Fail the workflow
+            return self._handle_reject(execution, user, current_step, request)
+        elif action == "request_change":
+            # ASSIGN TASK: Create a task for the requester
+            return self._handle_request_change(execution, user, current_step, request)
+        else:
+            return Response(
+                {"error": f"Invalid action '{action}'. Valid actions are: approve, reject, request_change"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def _handle_approve(self, execution, user, current_step, request):
+        """Handle approve action - move to next step based on rules"""
+        # Create StepApproval record
+        StepApproval.objects.create(
+            execution=execution,
+            step=current_step,
+            approved_by=user,
+            action="approve",
+            comment=request.data.get("comment", "")
+        )
+
+        # Get the next step using the workflow engine
+        next_step, evaluated_rules, error = get_next_step(current_step, execution.data)
+        
+        # Check for error (no rules defined)
+        if error:
+            execution.status = "failed"
+            execution.save()
+            
+            ExecutionLog.objects.create(
+                execution=execution,
+                step_name=str(current_step),
+                step_type=current_step.step_type,
+                approval_type=current_step.approval_type,
+                evaluated_rules=evaluated_rules,
+                selected_next_step=None,
+                status="failed",
+                approver_id=user.id,
+                approver_role=user.role,
+                error_message=error,
+                started_at=execution.started_at,
+                ended_at=timezone.now()
+            )
+            return Response({"status": "failed", "execution_id": str(execution.id), "error": error})
         
         # Notify requester that THIS step was approved
         try:
@@ -172,8 +222,8 @@ class ExecutionViewSet(viewsets.ModelViewSet):
         ExecutionLog.objects.create(
             execution=execution,
             step_name=str(current_step),
-            step_type=current_step.step_type if current_step else "approval",
-            approval_type=current_step.approval_type if current_step else "general",
+            step_type=current_step.step_type,
+            approval_type=current_step.approval_type,
             evaluated_rules=evaluated_rules,
             selected_next_step=str(next_step) if next_step else None,
             status="approved",
@@ -184,20 +234,157 @@ class ExecutionViewSet(viewsets.ModelViewSet):
         )
 
         # If there's a next step, move to it; otherwise mark execution as completed
-        if next_step:
+        # Also check if next step is an end step - if so, complete the workflow
+        if next_step and not next_step.is_end_step:
             execution.current_step = next_step
             execution.status = "in_progress"
+            execution.save()
+            # Process further steps
+            process_execution(execution)
         else:
+            # Either no next step OR next step is an end step - complete the workflow
             execution.current_step = None
             execution.status = "completed"
             execution.pending_approval_from = None
-        execution.save()
-        
-        # Only process further if there's a next step
-        if next_step:
-            process_execution(execution)
+            execution.save()
+            
+            # Notify completion
+            try:
+                notify_completed(execution)
+                send_completed_email(execution)
+            except Exception:
+                pass
 
         return Response({"status": execution.status, "execution_id": str(execution.id)})
+
+    def _handle_reject(self, execution, user, current_step, request):
+        """Handle reject action - fail the workflow"""
+        reason = request.data.get("reason", "")
+        
+        # Create StepApproval record
+        StepApproval.objects.create(
+            execution=execution,
+            step=current_step,
+            approved_by=user,
+            action="reject",
+            comment=reason
+        )
+
+        execution.status = "failed"
+        execution.save()
+
+        # Send rejection notifications and emails
+        try:
+            notify_rejected(execution, user)
+            send_rejected_email(execution, user, reason)
+        except Exception:
+            pass
+
+        # Create rejection log
+        ExecutionLog.objects.create(
+            execution=execution,
+            step_name=str(current_step),
+            step_type=current_step.step_type,
+            approval_type=current_step.approval_type,
+            evaluated_rules=[],
+            selected_next_step=None,
+            status="rejected",
+            approver_id=user.id,
+            approver_role=user.role,
+            error_message=reason,
+            started_at=execution.started_at,
+            ended_at=timezone.now()
+        )
+
+        return Response({"status": "rejected", "execution_id": str(execution.id)})
+
+    def _handle_request_change(self, execution, user, current_step, request):
+        """Handle request_change action - create a task for the requester"""
+        change_type = request.data.get("change_type", "generic")
+        change_description = request.data.get("description", "")
+        form_fields = request.data.get("form_fields", [])
+        
+        # Store the change request details
+        change_request_details = {
+            "change_type": change_type,
+            "description": change_description,
+            "form_fields": form_fields,
+            "requested_by": user.username,
+            "requested_at": timezone.now().isoformat()
+        }
+        
+        # Create StepApproval record
+        StepApproval.objects.create(
+            execution=execution,
+            step=current_step,
+            approved_by=user,
+            action="request_change",
+            comment=change_description,
+            change_request_details=change_request_details
+        )
+
+        # Create a task for the requester (triggered_by user)
+        requester = execution.triggered_by
+        if not requester:
+            return Response(
+                {"error": "Cannot request changes: no requester found for this execution"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        task_title = f"Action Required: {current_step.name}"
+        task_description = change_description or "Please make the required changes and resubmit."
+        
+        # Map change_type to task_type
+        task_type_map = {
+            "document_upload": "document_upload",
+            "verify_data": "verify_data",
+            "edit_data": "edit_data",
+            "lower_amount": "edit_data",
+            "request_info": "request_info",
+            "generic": "generic"
+        }
+        task_type = task_type_map.get(change_type, "generic")
+        
+        # Create the task
+        task = Task.objects.create(
+            execution=execution,
+            step=current_step,
+            assigned_to=requester,
+            title=task_title,
+            description=task_description,
+            form_fields=form_fields,
+            task_type=task_type,
+            original_data=execution.data.copy() if execution.data else {},
+            status="pending"
+        )
+        
+        # Update execution status
+        execution.status = "pending"
+        execution.pending_task_from = f"User: {requester.username}"
+        execution.save()
+        
+        # Log the request for change
+        ExecutionLog.objects.create(
+            execution=execution,
+            step_name=str(current_step),
+            step_type=current_step.step_type,
+            approval_type=current_step.approval_type,
+            evaluated_rules=[],
+            selected_next_step=None,
+            status="change_requested",
+            approver_id=user.id,
+            approver_role=user.role,
+            error_message=f"Change requested: {change_description}",
+            started_at=execution.started_at,
+            ended_at=timezone.now()
+        )
+
+        return Response({
+            "status": "change_requested",
+            "execution_id": str(execution.id),
+            "task_id": str(task.id),
+            "message": f"Change requested from {requester.username}. Task created for resubmission."
+        })
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):

@@ -46,8 +46,9 @@ export const authAPI = {
 };
 
 // Users API
+// Setting a high page_size to get all data for client-side pagination
 export const usersAPI = {
-    list: (params) => api.get('/accounts/users/', { params }),
+    list: (params) => api.get('/accounts/users/', { params: { page_size: 1000, ...params } }),
     get: (id) => api.get(`/accounts/users/${id}/`),
     create: (data) => api.post('/accounts/users/', data),
     update: (id, data) => api.patch(`/accounts/users/${id}/`, data),
@@ -56,8 +57,9 @@ export const usersAPI = {
 };
 
 // Workflows API
+// Setting a high page_size to get all data for client-side pagination
 export const workflowsAPI = {
-    list: (params) => api.get('/workflows/workflows/', { params }),
+    list: (params) => api.get('/workflows/workflows/', { params: { page_size: 1000, ...params } }),
     get: (id) => api.get(`/workflows/workflows/${id}/`),
     create: (data) => api.post('/workflows/workflows/', data),
     update: (id, data) => api.patch(`/workflows/workflows/${id}/`, data),
@@ -75,8 +77,9 @@ export const workflowFieldsAPI = {
 };
 
 // Steps API
+// Setting a high page_size to get all data for client-side pagination
 export const stepsAPI = {
-    list: (params) => api.get('/steps/steps/', { params }),
+    list: (params) => api.get('/steps/steps/', { params: { page_size: 1000, ...params } }),
     get: (id) => api.get(`/steps/steps/${id}/`),
     create: (data) => api.post('/steps/steps/', data),
     update: (id, data) => api.patch(`/steps/steps/${id}/`, data),
@@ -84,7 +87,8 @@ export const stepsAPI = {
     reorder: (workflowId, data) => api.post(`/steps/steps/reorder/`, { workflow: workflowId, steps: data.steps }),
 
     // Task Definitions (Templates)
-    getTaskDefinitions: (params) => api.get('/steps/definitions/', { params }),
+    // Setting a high page_size to get all data for client-side pagination
+    getTaskDefinitions: (params) => api.get('/steps/definitions/', { params: { page_size: 1000, ...params } }),
     createTaskDefinition: (data) => api.post('/steps/definitions/', data),
     updateTaskDefinition: (id, data) => api.patch(`/steps/definitions/${id}/`, data),
     deleteTaskDefinition: (id) => api.delete(`/steps/definitions/${id}/`),
@@ -102,8 +106,9 @@ export const stepsAPI = {
 };
 
 // Rules API
+// Setting a high page_size to get all data for client-side pagination
 export const rulesAPI = {
-    list: (params) => api.get('/rules/rules/', { params }),
+    list: (params) => api.get('/rules/rules/', { params: { page_size: 1000, ...params } }),
     get: (id) => api.get(`/rules/rules/${id}/`),
     create: (data) => api.post('/rules/rules/', data),
     update: (id, data) => api.patch(`/rules/rules/${id}/`, data),
@@ -112,8 +117,9 @@ export const rulesAPI = {
 };
 
 // Executions API
+// Setting a high page_size to get all data for client-side pagination
 export const executionsAPI = {
-    list: (params) => api.get('/executions/', { params }),
+    list: (params) => api.get('/executions/', { params: { page_size: 1000, ...params } }),
     get: (id) => api.get(`/executions/${id}/`),
     create: (data) => api.post('/executions/', data),
     approve: (id, data) => api.post(`/executions/${id}/approve/`, data),
@@ -129,8 +135,9 @@ export const executionsAPI = {
 };
 
 // Approvals API - Role-based approval tasks
+// Setting a high page_size to get all data for client-side pagination
 export const approvalsAPI = {
-    list: (params) => api.get('/executions/approvals/', { params }),
+    list: (params) => api.get('/executions/approvals/', { params: { page_size: 1000, ...params } }),
     get: (id) => api.get(`/approvals/${id}/`),
     approve: (id, data) => api.post(`/executions/${id}/approve/`, data),
     reject: (id, data) => api.post(`/executions/${id}/reject/`, data),
@@ -146,8 +153,9 @@ export const dashboardAPI = {
 };
 
 // Notifications API
+// Setting a high page_size to get all data for client-side pagination
 export const notificationsAPI = {
-    list: (params) => api.get('/notifications/', { params }),
+    list: (params) => api.get('/notifications/', { params: { page_size: 1000, ...params } }),
     markAsRead: (id) => api.post(`/notifications/${id}/read/`),
     markAllAsRead: () => api.post('/notifications/mark_all_read/'),
 };

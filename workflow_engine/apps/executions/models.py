@@ -131,8 +131,9 @@ class StepApproval(models.Model):
     """Tracks approvals for approval steps in workflow executions"""
     
     ACTION_CHOICES = (
-        ("approve", "Approve"),
-        ("reject", "Reject"),
+        ("approve", "Approve"),  # Accept - move to next step
+        ("reject", "Reject"),    # Fail the workflow
+        ("request_change", "Request Change"),  # Assign task to requester
     )
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -157,9 +158,16 @@ class StepApproval(models.Model):
         related_name="approvals"
     )
     
-    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     
     comment = models.TextField(blank=True, default="")
+    
+    # Store details for request_change action (e.g., what documents to submit, amount reduction, etc.)
+    change_request_details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Details for request_change action: {task_type, description, form_fields}"
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     

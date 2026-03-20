@@ -66,6 +66,12 @@ class Rule(models.Model):
         ('OR', 'OR'),
     )
     
+    # Rule types: CONDITION - evaluated based on conditions, DEFAULT - fallback when no conditions match
+    RULE_TYPES = (
+        ('CONDITION', 'Condition Based'),
+        ('DEFAULT', 'Default Next Step'),
+    )
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     name = models.CharField(max_length=255, blank=True, default="")
@@ -74,6 +80,14 @@ class Rule(models.Model):
         "steps.Step",
         on_delete=models.CASCADE,
         related_name="rules"
+    )
+    
+    # Rule type: CONDITION (conditions determine if this rule applies) or DEFAULT (fallback)
+    rule_type = models.CharField(
+        max_length=20,
+        choices=RULE_TYPES,
+        default='CONDITION',
+        help_text="Condition Based: evaluated when conditions are true. Default Next Step: used when no conditions match."
     )
 
     # Store conditions as JSON string (legacy support)
@@ -96,9 +110,21 @@ class Rule(models.Model):
         related_name="next_rules"
     )
 
-    priority = models.IntegerField(default=1)
+    priority = models.IntegerField(
+        default=1,
+        help_text="Priority of this rule within the step. Lower numbers are evaluated first."
+    )
 
-    is_default = models.BooleanField(default=False, help_text="Use this rule when no other rules match")
+    is_default = models.BooleanField(
+        default=False, 
+        help_text="Use this rule when no other rules match (fallback rule)"
+    )
+    
+    # Mark as end step - when this rule's next_step is reached, it can end the workflow
+    is_end_rule = models.BooleanField(
+        default=False,
+        help_text="Mark this as an end rule - reaching this rule's next_step completes the workflow"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

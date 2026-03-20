@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
     useReactTable,
     getCoreRowModel,
@@ -46,10 +46,16 @@ const DataTable = ({
         getPaginationRowModel: getPaginationRowModel(),
         initialState: {
             pagination: {
+                pageIndex: 0,
                 pageSize,
             },
         },
     });
+
+    // Reset to first page when data changes
+    useEffect(() => {
+        table.setPageIndex(0);
+    }, [data, table]);
 
     return (
         <div className={cn('space-y-4', className)}>

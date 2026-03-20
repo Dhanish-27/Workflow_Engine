@@ -5,6 +5,23 @@ from apps.steps.serializers import StepSerializer
 from apps.steps.models import Step
 
 
+class StepApprovalSerializer(serializers.ModelSerializer):
+    """Serializer for StepApproval model with change request details"""
+    approved_by = UserSerializer(read_only=True)
+    step_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = StepApproval
+        fields = [
+            'id', 'execution', 'step', 'step_name', 'approved_by', 'action',
+            'comment', 'change_request_details', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+    
+    def get_step_name(self, obj):
+        return obj.step.name if obj.step else None
+
+
 class ExecutionLogSerializer(serializers.ModelSerializer):
 
     class Meta:

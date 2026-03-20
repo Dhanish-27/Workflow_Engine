@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, User, Calendar, FileText, Shield, Users } from 'lucide-react';
+import { X, Trash2, User, Calendar, FileText, Shield, Users, Play, Flag, CheckCircle } from 'lucide-react';
 import { cn } from '../../utils';
 import useWorkflowStore from '../../store/workflowStore';
 
@@ -20,7 +20,7 @@ const stepTypeConfig = {
 };
 
 const NodeConfigPanel = () => {
-    const { selectedNode, updateNode, deleteNode, clearSelection } = useWorkflowStore();
+    const { selectedNode, updateNode, deleteNode, clearSelection, nodes } = useWorkflowStore();
     const [formData, setFormData] = useState({
         label: '',
         stepType: 'task',
@@ -29,6 +29,8 @@ const NodeConfigPanel = () => {
         approvalType: 'general',
         description: '',
         deadline: '',
+        isStartStep: false,
+        isEndStep: false,
     });
 
     useEffect(() => {
@@ -41,11 +43,23 @@ const NodeConfigPanel = () => {
                 approvalType: selectedNode.data.approvalType || 'general',
                 description: selectedNode.data.description || '',
                 deadline: selectedNode.data.deadline || '',
+                isStartStep: selectedNode.data.isStartStep || false,
+                isEndStep: selectedNode.data.isEndStep || false,
             });
         }
     }, [selectedNode]);
 
     const handleChange = (field, value) => {
+        // Handle start step - only one allowed
+        if (field === 'isStartStep' && value === true) {
+            // Unset all other start steps first
+            nodes.forEach(node => {
+                if (node.data.isStartStep && node.id !== selectedNode.id) {
+                    updateNode(node.id, { isStartStep: false });
+                }
+            });
+        }
+
         setFormData((prev) => ({ ...prev, [field]: value }));
         if (selectedNode) {
             updateNode(selectedNode.id, { [field]: value });
@@ -88,6 +102,39 @@ const NodeConfigPanel = () => {
                     {/* Step Type Badge */}
                     <div className={cn('px-3 py-2 rounded-lg text-sm font-semibold', cfg.bg, cfg.color)}>
                         {cfg.label}
+                    </div>
+
+                    {/* Start/End Step Toggle */}
+                    <div className="flex gap-2">
+                        {/* Start Step Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => handleChange('isStartStep', !formData.isStartStep)}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                                formData.isStartStep
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-2 border-emerald-500'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                            )}
+                        >
+                            <Play className={cn('w-4 h-4', formData.isStartStep && 'fill-current')} />
+                            Start
+                        </button>
+
+                        {/* End Step Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => handleChange('isEndStep', !formData.isEndStep)}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                                formData.isEndStep
+                                    ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-2 border-rose-500'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-2 border-slate-200 dark:border-slate-700 hover:border-rose-300'
+                            )}
+                        >
+                            <Flag className={cn('w-4 h-4', formData.isEndStep && 'fill-current')} />
+                            End
+                        </button>
                     </div>
 
                     {/* Step Name */}

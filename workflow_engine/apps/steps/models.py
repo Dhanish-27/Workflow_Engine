@@ -158,7 +158,15 @@ class Step(models.Model):
         null=True,
     )
 
-    order = models.IntegerField()
+    is_start_step = models.BooleanField(
+        default=False,
+        help_text="If true, this is the starting step of the workflow"
+    )
+    
+    is_end_step = models.BooleanField(
+        default=False,
+        help_text="If true, this is an ending step of the workflow"
+    )
 
     metadata = models.JSONField(default=dict)
 
@@ -169,7 +177,7 @@ class Step(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["order"]
+        ordering = ["name"]
 
     def __str__(self):
         return self.name

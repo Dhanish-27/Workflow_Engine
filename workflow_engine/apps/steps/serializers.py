@@ -74,7 +74,7 @@ class StepSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'workflow', 'workflow_name', 'name', 'step_type', 'task_definition',
             'task_definition_details', 'approval_type', 'assigned_role', 'assigned_to', 
-            'task_template', 'order', 'metadata', 'form_fields', 'created_at', 'updated_at'
+            'task_template', 'is_start_step', 'is_end_step', 'metadata', 'form_fields', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     

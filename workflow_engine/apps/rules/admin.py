@@ -17,23 +17,25 @@ class RuleAdmin(admin.ModelAdmin):
         "id",
         "name",
         "step",
+        "rule_type",
         "logical_operator",
         "next_step",
         "priority",
-        "is_default"
+        "is_default",
+        "is_end_rule"
     )
     
-    list_filter = ("step", "logical_operator", "is_default")
+    list_filter = ("step", "logical_operator", "is_default", "rule_type", "is_end_rule")
     
     search_fields = ("name", "step__name")
     
-    ordering = ("priority",)
+    ordering = ("step", "priority")
     
     inlines = [RuleConditionInline]
     
     fieldsets = (
         (None, {
-            'fields': ('name', 'step', 'logical_operator', 'priority', 'is_default')
+            'fields': ('name', 'step', 'rule_type', 'logical_operator', 'priority', 'is_default', 'is_end_rule')
         }),
         ('Transition', {
             'fields': ('next_step',)

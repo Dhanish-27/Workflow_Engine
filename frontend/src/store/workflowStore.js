@@ -83,6 +83,8 @@ const initialNodes = [
             description: 'Workflow start point',
             deadline: '',
             status: 'pending',
+            isStartStep: true,
+            isEndStep: false,
         },
     },
     {
@@ -96,6 +98,8 @@ const initialNodes = [
             description: 'Review the request',
             deadline: '2024-12-31',
             status: 'pending',
+            isStartStep: false,
+            isEndStep: false,
         },
     },
     {
@@ -109,6 +113,8 @@ const initialNodes = [
             description: 'Send notification',
             deadline: '',
             status: 'pending',
+            isStartStep: false,
+            isEndStep: true,
         },
     },
 ];
@@ -122,6 +128,9 @@ const initialEdges = [
         type: 'smoothstep',
         animated: false,
         conditions: [],
+        isDefault: false,
+        isEndRule: false,
+        ruleType: 'CONDITION',
         markerEnd: { type: MarkerType.ArrowClosed },
     },
     {
@@ -132,6 +141,9 @@ const initialEdges = [
         type: 'smoothstep',
         animated: false,
         conditions: [],
+        isDefault: true,
+        isEndRule: false,
+        ruleType: 'DEFAULT',
         markerEnd: { type: MarkerType.ArrowClosed },
     },
 ];
@@ -190,6 +202,8 @@ const useWorkflowStore = create((set, get) => ({
                 deadline: nodeData.deadline || '',
                 status: 'pending',
                 backendId: null,
+                isStartStep: false,
+                isEndStep: false,
             },
         };
 
@@ -247,6 +261,17 @@ const useWorkflowStore = create((set, get) => ({
     },
 
     onConnect: (connection) => {
+        // Check if an edge already exists between these two nodes
+        const existingEdge = get().edges.find(
+            (edge) => edge.source === connection.source && edge.target === connection.target
+        );
+
+        if (existingEdge) {
+            // Prevent multiple edges between the same nodes
+            console.warn('Only one rule is allowed between two steps. An edge already exists.');
+            return;
+        }
+
         const newEdge = {
             ...connection,
             id: generateEdgeId(),
@@ -254,8 +279,11 @@ const useWorkflowStore = create((set, get) => ({
             type: 'smoothstep',
             animated: false,
             conditions: [],
+            isDefault: false,
+            isEndRule: false,
+            ruleType: 'CONDITION',
             markerEnd: { type: MarkerType.ArrowClosed },
-            data: { conditions: [] },
+            data: { conditions: [], isDefault: false, isEndRule: false, ruleType: 'CONDITION' },
         };
 
         set((state) => ({
@@ -351,6 +379,8 @@ const useWorkflowStore = create((set, get) => ({
                     deadline: '',
                     status: 'pending',
                     backendId: step.id,
+                    isStartStep: step.is_start_step || false,
+                    isEndStep: step.is_end_step || false,
                 },
             }));
 
@@ -407,11 +437,17 @@ const useWorkflowStore = create((set, get) => ({
                             type: 'animated',
                             conditions: mappedConditions,
                             conditionLogic: rule.logical_operator || 'AND',
+                            isDefault: rule.is_default || false,
+                            isEndRule: rule.is_end_rule || false,
+                            ruleType: rule.rule_type || 'CONDITION',
                             markerEnd: { type: MarkerType.ArrowClosed },
                             data: {
                                 label: rule.name || 'Next',
                                 conditions: mappedConditions,
-                                conditionLogic: rule.logical_operator || 'AND'
+                                conditionLogic: rule.logical_operator || 'AND',
+                                isDefault: rule.is_default || false,
+                                isEndRule: rule.is_end_rule || false,
+                                ruleType: rule.rule_type || 'CONDITION'
                             },
                             backendRuleId: rule.id,
                         });
@@ -462,15 +498,28 @@ const useWorkflowStore = create((set, get) => ({
                 });
             }
 
-            // 2. Save each node as a step; build canvasId → backendId map
+            // 2. Get existing steps from backend (for update case)
+            let existingSteps = [];
+            if (savedWorkflowId) {
+                try {
+                    const stepsRes = await stepsAPI.list({ workflow: savedWorkflowId });
+                    existingSteps = stepsRes.data.results || stepsRes.data || [];
+                } catch (e) {
+                    console.warn('Could not fetch existing steps:', e);
+                }
+            }
+
+            // 2a. Save each node as a step; build canvasId → backendId map
             const idMap = {}; // canvasNodeId → backend step UUID
+            const savedStepIds = []; // Track IDs of steps we want to keep
             for (let i = 0; i < nodes.length; i++) {
                 const node = nodes[i];
                 const stepPayload = {
                     workflow: savedWorkflowId,
                     name: node.data.label,
                     step_type: node.data.stepType,
-                    order: i + 1,
+                    is_start_step: node.data.isStartStep || false,
+                    is_end_step: node.data.isEndStep || false,
                     approval_type: node.data.approvalType || 'general',
                     assigned_role: node.data.assignedRole || null,
                     assigned_to: node.data.assignedTo || null,
@@ -484,14 +533,40 @@ const useWorkflowStore = create((set, get) => ({
                     // Update existing step
                     await stepsAPI.update(node.data.backendId, stepPayload);
                     idMap[node.id] = node.data.backendId;
+                    savedStepIds.push(node.data.backendId);
                 } else {
                     // Create new step
                     const stepRes = await stepsAPI.create(stepPayload);
                     idMap[node.id] = stepRes.data.id;
+                    savedStepIds.push(stepRes.data.id);
                 }
             }
 
-            // 3. Save each edge as a rule
+            // 2b. Delete orphaned steps (exist in backend but not in frontend)
+            for (const existingStep of existingSteps) {
+                if (!savedStepIds.includes(existingStep.id)) {
+                    try {
+                        await stepsAPI.delete(existingStep.id);
+                        console.log('Deleted orphaned step:', existingStep.id);
+                    } catch (e) {
+                        console.warn('Failed to delete step:', existingStep.id, e);
+                    }
+                }
+            }
+
+            // 3. Get existing rules from backend (for update case)
+            let existingRules = [];
+            if (savedWorkflowId) {
+                try {
+                    const rulesRes = await rulesAPI.list({ workflow: savedWorkflowId });
+                    existingRules = rulesRes.data.results || rulesRes.data || [];
+                } catch (e) {
+                    console.warn('Could not fetch existing rules:', e);
+                }
+            }
+
+            // 3a. Save each edge as a rule
+            const savedRuleIds = []; // Track IDs of rules we want to keep
             for (const edge of edges) {
                 const sourceStepId = idMap[edge.source];
                 const targetStepId = idMap[edge.target];
@@ -526,14 +601,30 @@ const useWorkflowStore = create((set, get) => ({
                     condition: conditionJson,
                     logical_operator: edge.conditionLogic || 'AND',
                     priority: 1,
-                    is_default: !conditionJson,
+                    is_default: edge.isDefault || edge.data?.isDefault || (edge.ruleType === 'DEFAULT' || edge.data?.ruleType === 'DEFAULT'),
+                    is_end_rule: edge.isEndRule || edge.data?.isEndRule || false,
+                    rule_type: edge.ruleType || edge.data?.ruleType || 'CONDITION',
                     conditions: conditionsArray, // Send nested conditions for RuleCondition model
                 };
 
                 if (edge.backendRuleId) {
                     await rulesAPI.update(edge.backendRuleId, rulePayload);
+                    savedRuleIds.push(edge.backendRuleId);
                 } else {
-                    await rulesAPI.create(rulePayload);
+                    const ruleRes = await rulesAPI.create(rulePayload);
+                    savedRuleIds.push(ruleRes.data.id);
+                }
+            }
+
+            // 3b. Delete orphaned rules (exist in backend but not in frontend)
+            for (const existingRule of existingRules) {
+                if (!savedRuleIds.includes(existingRule.id)) {
+                    try {
+                        await rulesAPI.delete(existingRule.id);
+                        console.log('Deleted orphaned rule:', existingRule.id);
+                    } catch (e) {
+                        console.warn('Failed to delete rule:', existingRule.id, e);
+                    }
                 }
             }
 

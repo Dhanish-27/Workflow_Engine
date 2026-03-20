@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Plus, GitBranch, AlertTriangle, Layers, Loader2 } from 'lucide-react';
+import { X, Trash2, Plus, GitBranch, AlertTriangle, Layers, Loader2, ArrowRight, CheckCircle, Flag } from 'lucide-react';
 import { cn } from '../../utils';
 import useWorkflowStore from '../../store/workflowStore';
 import { workflowFieldsAPI } from '../../services/api';
@@ -172,6 +172,9 @@ const ConditionBuilder = () => {
     const [conditions, setConditions] = useState([]);
     const [conditionLogic, setConditionLogic] = useState('AND');
     const [edgeLabel, setEdgeLabel] = useState('Next');
+    const [isDefault, setIsDefault] = useState(false);
+    const [isEndRule, setIsEndRule] = useState(false);
+    const [ruleType, setRuleType] = useState('CONDITION');
 
     // Real WorkflowField records fetched from backend
     const [fields, setFields] = useState([]);
@@ -208,6 +211,9 @@ const ConditionBuilder = () => {
             setConditions(edgeConditions);
             setConditionLogic(selectedEdge.conditionLogic || selectedEdge.data?.conditionLogic || 'AND');
             setEdgeLabel(selectedEdge.label || 'Next');
+            setIsDefault(selectedEdge.isDefault || selectedEdge.data?.isDefault || false);
+            setIsEndRule(selectedEdge.isEndRule || selectedEdge.data?.isEndRule || false);
+            setRuleType(selectedEdge.ruleType || selectedEdge.data?.ruleType || 'CONDITION');
         }
     }, [selectedEdge]);
 
@@ -250,6 +256,37 @@ const ConditionBuilder = () => {
         if (selectedEdge) updateEdge(selectedEdge.id, { label });
     };
 
+    const handleDefaultChange = (value) => {
+        setIsDefault(value);
+        // If setting as default, also update ruleType to DEFAULT
+        const newRuleType = value ? 'DEFAULT' : 'CONDITION';
+        setRuleType(newRuleType);
+        if (selectedEdge) {
+            updateEdge(selectedEdge.id, {
+                isDefault: value,
+                ruleType: newRuleType,
+                data: {
+                    ...selectedEdge.data,
+                    isDefault: value,
+                    ruleType: newRuleType
+                }
+            });
+        }
+    };
+
+    const handleEndRuleChange = (value) => {
+        setIsEndRule(value);
+        if (selectedEdge) {
+            updateEdge(selectedEdge.id, {
+                isEndRule: value,
+                data: {
+                    ...selectedEdge.data,
+                    isEndRule: value
+                }
+            });
+        }
+    };
+
     const handleDelete = () => {
         if (selectedEdge) deleteEdge(selectedEdge.id);
     };
@@ -284,6 +321,39 @@ const ConditionBuilder = () => {
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                    {/* Default Rule & End Rule Toggles */}
+                    <div className="flex gap-2">
+                        {/* Default Rule Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => handleDefaultChange(!isDefault)}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                                isDefault
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-2 border-emerald-500'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                            )}
+                        >
+                            <ArrowRight className={cn('w-4 h-4', isDefault && 'rotate-180')} />
+                            Default
+                        </button>
+
+                        {/* End Rule Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => handleEndRuleChange(!isEndRule)}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                                isEndRule
+                                    ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-2 border-rose-500'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-2 border-slate-200 dark:border-slate-700 hover:border-rose-300'
+                            )}
+                        >
+                            <Flag className={cn('w-4 h-4', isEndRule && 'fill-current')} />
+                            End
+                        </button>
+                    </div>
+
                     {/* Connection label */}
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">

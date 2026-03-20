@@ -22,45 +22,73 @@ def get_next_step(step, data):
     """
     Get the next step based on rule evaluation.
     
+    Rules-based execution only:
+    - Condition-based rules: evaluated in priority order, first match wins
+    - Default rule: used when no conditions match
+    - NO sequential fallback - if no rules are defined or no match, workflow fails
+    
     Args:
         step: Step object with related rules
         data: Dict of field values to evaluate rules against
         
     Returns:
         tuple: (next_step, evaluated_rules) where:
-            - next_step: The next Step object to transition to, or None
+            - next_step: The next Step object to transition to, or None (workflow ends)
             - evaluated_rules: List of dicts with rule_id and result
+            - error: Optional error message if workflow should fail
     """
     if not step:
-        return None, []
+        return None, [], "No step provided"
 
     rules = step.rules.all().order_by("priority")
+    
+    # Check if any rules exist - if not, workflow should fail
+    if not rules.exists():
+        return None, [], f"No rules defined for step '{step.name}'. Workflow cannot proceed."
     
     results = []
     default_rule = None
     
+    # Separate condition-based rules from default rules
     for rule in rules:
-        if rule.is_default:
+        if rule.is_default or rule.rule_type == 'DEFAULT':
             default_rule = rule
             continue
+        
+        # Check if this rule has any conditions defined
+        has_conditions = False
+        if rule.conditions.exists():
+            has_conditions = True
+        elif rule.condition:
+            # Check legacy JSON conditions
+            import json
+            try:
+                cond_data = json.loads(rule.condition) if isinstance(rule.condition, str) else rule.condition
+                if cond_data.get('conditions'):
+                    has_conditions = True
+            except:
+                pass
+        
+        # If no conditions defined, treat this rule as always matching (like a pass-through)
+        if not has_conditions:
+            results.append({"rule_id": str(rule.id), "rule_name": rule.name, "matched": True, "no_conditions": True})
+            return rule.next_step, results, None
             
         # Use the new evaluate_conditions method from rules/models.py
         # This properly handles RuleCondition model objects and legacy JSON conditions
         matches = rule.evaluate_conditions(data)
-        results.append({"rule_id": str(rule.id), "result": matches})
+        results.append({"rule_id": str(rule.id), "rule_name": rule.name, "matched": matches})
         
         if matches:
-            return rule.next_step, results
+            return rule.next_step, results, None
     
-    # If no rules matched, use default rule if it exists
+    # If no condition-based rules matched, use default rule if it exists
     if default_rule:
-        return default_rule.next_step, results
+        results.append({"rule_id": str(default_rule.id), "rule_name": default_rule.name, "matched": True, "is_default": True})
+        return default_rule.next_step, results, None
         
-    # No rules matched and no default rule - fall back to sequential execution
-    # Get the next step in the workflow based on the 'order' field
-    next_step = step.workflow.steps.filter(order__gt=step.order).first()
-    
-    return next_step, results
+    # No rules matched and no default rule - workflow should fail
+    return None, results, f"No matching rules found for step '{step.name}' and no default rule defined. Workflow cannot proceed."
 
 
 def process_execution(execution):
@@ -74,13 +102,29 @@ def process_execution(execution):
     # If no current step, try to initialize from workflow start step
     if not execution.current_step:
         if execution.status == "in_progress":
-            start_step = execution.workflow.start_step
-            # Fallback if start_step is not explicitly set
+            # Use the step marked as is_start_step=True
+            start_step = execution.workflow.steps.filter(is_start_step=True).first()
+            
+            # Fallback to workflow.start_step if is_start_step not set
             if not start_step:
-                start_step = execution.workflow.steps.order_by('order').first()
+                start_step = execution.workflow.start_step
             
             if not start_step:
-                # If still no step, we can't proceed
+                # If still no step, fail the workflow - no start point defined
+                execution.status = "failed"
+                execution.save()
+                
+                ExecutionLog.objects.create(
+                    execution=execution,
+                    step_name="Workflow Start",
+                    step_type="system",
+                    evaluated_rules=[],
+                    selected_next_step=None,
+                    status="failed",
+                    error_message="No start step defined for workflow. Please configure a start step.",
+                    started_at=timezone.now(),
+                    ended_at=timezone.now()
+                )
                 return
             
             execution.current_step = start_step
@@ -279,7 +323,7 @@ def process_execution(execution):
                     else:
                         logger.warning(f"Task step {current_step.name} has no assigned_role, assigned_to, or triggered_by")
                         # Still evaluate rules and move to next step if no user is available
-                        next_step, evaluated_rules = get_next_step(current_step, execution.data)
+                        next_step, evaluated_rules, error = get_next_step(current_step, execution.data)
                 else:
                     # Get users with the matching role
                     users_with_role = User.objects.filter(role=assigned_role)
@@ -287,7 +331,7 @@ def process_execution(execution):
                     if not users_with_role.exists():
                         logger.warning(f"No users found with role '{assigned_role}' for task step {current_step.name}")
                         # Evaluate rules and move to next step even if no users found
-                        next_step, evaluated_rules = get_next_step(current_step, execution.data)
+                        next_step, evaluated_rules, error = get_next_step(current_step, execution.data)
                     else:
                         task_title = current_step.name
                         task_description = current_step.description
@@ -351,10 +395,46 @@ def process_execution(execution):
                         return
             # If we get here, either tasks existed but are completed, or no role was assigned
             # Evaluate rules and move to next step
-            next_step, evaluated_rules = get_next_step(current_step, execution.data)
+            next_step, evaluated_rules, error = get_next_step(current_step, execution.data)
+            
+            # Handle error - fail the workflow if no rules defined
+            if error:
+                execution.status = "failed"
+                execution.save()
+                
+                ExecutionLog.objects.create(
+                    execution=execution,
+                    step_name=current_step.name,
+                    step_type=current_step.step_type,
+                    evaluated_rules=evaluated_rules,
+                    selected_next_step=None,
+                    status="failed",
+                    error_message=error,
+                    started_at=timezone.now(),
+                    ended_at=timezone.now()
+                )
+                return
         else:
             # For non-approval, non-task steps (notification), evaluate rules and move to next
-            next_step, evaluated_rules = get_next_step(current_step, execution.data)
+            next_step, evaluated_rules, error = get_next_step(current_step, execution.data)
+            
+            # Handle error - fail the workflow if no rules defined
+            if error:
+                execution.status = "failed"
+                execution.save()
+                
+                ExecutionLog.objects.create(
+                    execution=execution,
+                    step_name=current_step.name,
+                    step_type=current_step.step_type,
+                    evaluated_rules=evaluated_rules,
+                    selected_next_step=None,
+                    status="failed",
+                    error_message=error,
+                    started_at=timezone.now(),
+                    ended_at=timezone.now()
+                )
+                return
         
         # Log the automated transition
         ExecutionLog.objects.create(
