@@ -2,6 +2,19 @@ import React, { memo, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { cn } from '../../utils';
 
+// Arrow icons for start/end indicators
+const StartArrow = ({ className }) => (
+    <svg className={cn('w-4 h-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+    </svg>
+);
+
+const EndArrow = ({ className }) => (
+    <svg className={cn('w-4 h-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+    </svg>
+);
+
 // Step type configuration
 const stepTypeConfig = {
     task: {
@@ -96,6 +109,10 @@ const WorkflowNode = ({ id, data, selected, isExecutionMode, executionState }) =
         }
     }
 
+    // Check if this node is start or end step
+    const isStartStep = data.isStartStep;
+    const isEndStep = data.isEndStep;
+
     return (
         <div
             className={cn(
@@ -108,6 +125,30 @@ const WorkflowNode = ({ id, data, selected, isExecutionMode, executionState }) =
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
+            {/* Start Step Indicator - Left Arrow */}
+            {isStartStep && (
+                <div className="absolute -left-8 top-1/2 -translate-y-1/2 z-10">
+                    <div className="flex items-center gap-1">
+                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/40">
+                            <StartArrow className="w-3 h-3 text-white" />
+                        </div>
+                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow">START</span>
+                    </div>
+                </div>
+            )}
+
+            {/* End Step Indicator - Right Arrow */}
+            {isEndStep && (
+                <div className="absolute -right-8 top-1/2 -translate-y-1/2 z-10">
+                    <div className="flex items-center gap-1">
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow">END</span>
+                        <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/40">
+                            <EndArrow className="w-3 h-3 text-white" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Input Handle */}
             <Handle
                 type="target"
@@ -125,9 +166,9 @@ const WorkflowNode = ({ id, data, selected, isExecutionMode, executionState }) =
                 className={cn(
                     'w-64 rounded-xl border-2 bg-white dark:bg-slate-900',
                     'transition-all duration-200 overflow-hidden',
-                    selected
-                        ? config.borderLight + (isDark ? ` ${config.borderDark}` : '')
-                        : 'border-surface-200 dark:border-slate-700',
+                    isStartStep ? 'border-blue-500 dark:border-blue-500 ring-2 ring-blue-500/30' :
+                        isEndStep ? 'border-red-500 dark:border-red-500 ring-2 ring-red-500/30' :
+                            selected ? config.borderLight + (isDark ? ` ${config.borderDark}` : '') : 'border-surface-200 dark:border-slate-700',
                     statusBorder,
                     'shadow-md'
                 )}

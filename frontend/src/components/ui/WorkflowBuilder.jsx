@@ -32,6 +32,9 @@ import {
     ZoomOut,
     Layers,
     ChevronDown,
+    ArrowRight,
+    ArrowLeft,
+    Flag,
 } from 'lucide-react';
 import { cn } from '../../utils';
 import useWorkflowStore from '../../store/workflowStore';
@@ -314,10 +317,19 @@ const Toolbar = ({ onValidate }) => {
         historyIndex,
         isSaving,
         saveWorkflow,
+        nodes,
+        startStepSelectionMode,
+        endStepSelectionMode,
+        setStartStepSelectionMode,
+        setEndStepSelectionMode,
     } = useWorkflowStore();
 
     const canUndo = historyIndex > 0;
     const canRedo = historyIndex < history.length - 1;
+
+    // Find current start and end step names
+    const startStep = nodes.find(n => n.data.isStartStep);
+    const endStep = nodes.find(n => n.data.isEndStep);
 
     return (
         <div className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 flex-shrink-0 shadow-sm">
@@ -385,6 +397,43 @@ const Toolbar = ({ onValidate }) => {
                 >
                     <LayoutGrid className="w-4 h-4" /> Layout
                 </button>
+
+                {/* Start/End Step Selection Dropdown */}
+                <div className="relative flex items-center">
+                    <div className="flex items-center">
+                        <button
+                            onClick={() => setStartStepSelectionMode(!startStepSelectionMode)}
+                            title="Set Start Step"
+                            className={cn(
+                                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                                startStepSelectionMode
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            )}
+                        >
+                            <ArrowRight className="w-4 h-4" />
+                            Start
+                        </button>
+                        <button
+                            onClick={() => setEndStepSelectionMode(!endStepSelectionMode)}
+                            title="Set End Step"
+                            className={cn(
+                                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ml-1',
+                                endStepSelectionMode
+                                    ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm shadow-red-500/30'
+                                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            )}
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            End
+                        </button>
+                    </div>
+                    {(startStepSelectionMode || endStepSelectionMode) && nodes.length > 0 && (
+                        <div className="absolute top-full left-0 mt-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs rounded whitespace-nowrap z-50">
+                            {startStepSelectionMode ? 'Click a node to set as START' : 'Click a node to set as END'}
+                        </div>
+                    )}
+                </div>
 
                 {/* Validate */}
                 <button
@@ -474,6 +523,10 @@ const WorkflowBuilderContent = () => {
         executionState,
         theme,
         validateWorkflow,
+        startStepSelectionMode,
+        endStepSelectionMode,
+        setStartStep,
+        setEndStep,
     } = useWorkflowStore();
 
     const { fitView } = useReactFlow();
@@ -550,8 +603,19 @@ const WorkflowBuilderContent = () => {
     }));
 
     const onNodeClick = useCallback((event, node) => {
+        // Handle start step selection mode
+        if (startStepSelectionMode) {
+            setStartStep(node.id);
+            return;
+        }
+        // Handle end step selection mode
+        if (endStepSelectionMode) {
+            setEndStep(node.id);
+            return;
+        }
+        // Normal node selection
         setSelectedNode(node);
-    }, [setSelectedNode]);
+    }, [setSelectedNode, startStepSelectionMode, endStepSelectionMode, setStartStep, setEndStep]);
 
     const onEdgeClick = useCallback((event, edge) => {
         setSelectedEdge(edge);

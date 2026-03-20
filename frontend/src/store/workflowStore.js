@@ -165,6 +165,10 @@ const useWorkflowStore = create((set, get) => ({
     theme: 'light',
     saveStatus: 'saved', // 'saving', 'saved', 'error'
 
+    // Start/End Step Selection Mode
+    startStepSelectionMode: false,
+    endStepSelectionMode: false,
+
     // History for undo/redo
     history: [],
     historyIndex: -1,
@@ -322,6 +326,43 @@ const useWorkflowStore = create((set, get) => ({
 
     clearSelection: () => {
         set({ selectedNode: null, selectedEdge: null });
+    },
+
+    // Start/End Step Selection
+    setStartStepSelectionMode: (enabled) => {
+        set({
+            startStepSelectionMode: enabled,
+            endStepSelectionMode: enabled ? false : get().endStepSelectionMode
+        });
+    },
+
+    setEndStepSelectionMode: (enabled) => {
+        set({
+            endStepSelectionMode: enabled,
+            startStepSelectionMode: enabled ? false : get().startStepSelectionMode
+        });
+    },
+
+    setStartStep: (nodeId) => {
+        set((state) => ({
+            nodes: state.nodes.map((node) => ({
+                ...node,
+                data: { ...node.data, isStartStep: node.id === nodeId },
+            })),
+            startStepSelectionMode: false,
+        }));
+        get().saveToHistory();
+    },
+
+    setEndStep: (nodeId) => {
+        set((state) => ({
+            nodes: state.nodes.map((node) => ({
+                ...node,
+                data: { ...node.data, isEndStep: node.id === nodeId },
+            })),
+            endStepSelectionMode: false,
+        }));
+        get().saveToHistory();
     },
 
     // Modal
