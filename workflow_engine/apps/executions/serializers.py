@@ -40,6 +40,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
     timeline = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     pending_approval_role = serializers.SerializerMethodField()
+    latest_task_data = serializers.SerializerMethodField()
 
     class Meta:
         model = Execution
@@ -54,6 +55,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
             "current_step_name",
             "pending_approval_from",
             "retries",
+            "task_cycle_count",
             "triggered_by",
             "triggered_by_name",
             "triggered_by_email",
@@ -64,6 +66,7 @@ class ExecutionSerializer(serializers.ModelSerializer):
             "timeline",
             "status_display",
             "pending_approval_role",
+            "latest_task_data",
         ]
         read_only_fields = [
             "id",
@@ -134,6 +137,13 @@ class ExecutionSerializer(serializers.ModelSerializer):
             return obj.get_pending_approval_from_display() or obj.pending_approval_from
         return None
 
+    def get_latest_task_data(self, obj):
+        """Returns the data from the most recent completed task for this execution"""
+        latest_task = obj.tasks.filter(status='completed').order_by('-completed_at').first()
+        if latest_task and latest_task.data:
+            return latest_task.data
+        return None
+
 
 class ExecutionNestedSerializer(serializers.ModelSerializer):
     """Nested serializer for Execution in Task serializer"""
@@ -174,6 +184,7 @@ class TaskSerializer(serializers.ModelSerializer):
             'description',
             'form_fields',
             'task_type',
+            'original_data',
         ]
         read_only_fields = ['id', 'created_at', 'completed_at']
     

@@ -61,6 +61,18 @@ class Execution(models.Model):
 
     retries = models.IntegerField(default=0)
 
+    # Track task cycle count for request_change functionality (max 5 cycles)
+    task_cycle_count = models.IntegerField(default=0)
+    
+    # Track the step to return to after requester completes a task
+    original_step_for_task = models.ForeignKey(
+        "steps.Step",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="execution_original_step"
+    )
+
     triggered_by = models.ForeignKey(
         "accounts.User",
         on_delete=models.SET_NULL,
@@ -242,6 +254,7 @@ class Task(models.Model):
             ("document_upload", "Upload a new document"),
             ("verify_data", "Verify existing details"),
             ("edit_data", "Edit requested field data"),
+            ("add_data", "Add new data"),
             ("request_info", "Requesting Information"),
         ),
         default="generic"

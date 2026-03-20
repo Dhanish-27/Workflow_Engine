@@ -300,6 +300,37 @@ class ExecutionViewSet(viewsets.ModelViewSet):
 
     def _handle_request_change(self, execution, user, current_step, request):
         """Handle request_change action - create a task for the requester"""
+        # Check cycle limit - max 5 cycles allowed
+        MAX_CYCLE_LIMIT = 5
+        current_cycle = execution.task_cycle_count or 0
+        
+        if current_cycle >= MAX_CYCLE_LIMIT:
+            # Fail the workflow as cycle limit exceeded
+            execution.status = "failed"
+            execution.save()
+            
+            # Log the failure
+            ExecutionLog.objects.create(
+                execution=execution,
+                step_name=str(current_step),
+                step_type=current_step.step_type,
+                approval_type=current_step.approval_type,
+                evaluated_rules=[],
+                selected_next_step=None,
+                status="failed",
+                approver_id=user.id,
+                approver_role=user.role,
+                error_message=f"Cycle limit of {MAX_CYCLE_LIMIT} exceeded. Maximum task requests reached.",
+                started_at=execution.started_at,
+                ended_at=timezone.now()
+            )
+            
+            return Response({
+                "status": "failed",
+                "execution_id": str(execution.id),
+                "error": f"Maximum cycle limit of {MAX_CYCLE_LIMIT} exceeded. Workflow failed."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         change_type = request.data.get("change_type", "generic")
         change_description = request.data.get("description", "")
         form_fields = request.data.get("form_fields", [])
@@ -339,6 +370,7 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             "document_upload": "document_upload",
             "verify_data": "verify_data",
             "edit_data": "edit_data",
+            "add_data": "add_data",
             "lower_amount": "edit_data",
             "request_info": "request_info",
             "generic": "generic"
@@ -358,9 +390,12 @@ class ExecutionViewSet(viewsets.ModelViewSet):
             status="pending"
         )
         
-        # Update execution status
+        # Update execution status - increment cycle count and save original step
         execution.status = "pending"
+        execution.pending_approval_from = None  # Clear approval as task is now for requester
         execution.pending_task_from = f"User: {requester.username}"
+        execution.task_cycle_count = current_cycle + 1
+        execution.original_step_for_task = current_step
         execution.save()
         
         # Log the request for change
@@ -845,19 +880,26 @@ class TaskCompleteView(APIView):
         if serializer.validated_data.get('data') is not None:
             task.data = serializer.validated_data['data']
             
-            # If task has new_field definitions, merge the data into execution.data
+            # Merge task data into execution.data for both new fields and edited fields
             if task.form_fields and isinstance(task.form_fields, list):
-                new_fields = []
+                fields_to_update = []
                 for field in task.form_fields:
-                    if isinstance(field, dict) and field.get('is_new_field'):
-                        field_name = field.get('field_name') or field.get('name') or field.get('key')
-                        if field_name:
-                            new_fields.append(field_name)
+                    if isinstance(field, dict):
+                        # Handle new fields
+                        if field.get('is_new_field'):
+                            field_name = field.get('field_name') or field.get('name') or field.get('key')
+                            if field_name:
+                                fields_to_update.append(field_name)
+                        # Handle edit/verify fields - also update execution data
+                        elif field.get('is_verify_field'):
+                            field_name = field.get('field_name') or field.get('name') or field.get('key')
+                            if field_name:
+                                fields_to_update.append(field_name)
                 
-                # If there are new fields, update execution.data with the submitted values
-                if new_fields and task.data and execution:
+                # Update execution.data with submitted values
+                if fields_to_update and task.data and execution:
                     execution_data = execution.data.copy() if execution.data else {}
-                    for field_name in new_fields:
+                    for field_name in fields_to_update:
                         if field_name in task.data:
                             execution_data[field_name] = task.data[field_name]
                     execution.data = execution_data
@@ -868,34 +910,78 @@ class TaskCompleteView(APIView):
         # execution and current_step are already defined above
         
         if current_step and execution:
-            # Get the next step
-            next_step, evaluated_rules = get_next_step(current_step, execution.data)
+            # Check if there's an original step to return to (from request_change cycle)
+            original_step = execution.original_step_for_task
             
-            # Log the task completion
-            ExecutionLog.objects.create(
-                execution=execution,
-                step_name=current_step.name,
-                step_type=current_step.step_type,
-                evaluated_rules=evaluated_rules,
-                selected_next_step=str(next_step) if next_step else None,
-                status="completed",
-                approver_id=user.id,
-                approver_role=user.role,
-                started_at=task.created_at,
-                ended_at=task.completed_at
-            )
-            
-            # Clear pending fields when moving to next step
-            execution.pending_approval_from = None
-            execution.pending_task_from = None
-            
-            # Update execution with next step
-            execution.current_step = next_step
-            execution.save()
-            
-            # Continue processing the execution
-            from .engine import process_execution
-            process_execution(execution)
+            if original_step:
+                # Return to the original approval step instead of moving forward
+                # This allows the same approver to review again after requester makes changes
+                
+                # Log the task completion and return to approver
+                ExecutionLog.objects.create(
+                    execution=execution,
+                    step_name=current_step.name,
+                    step_type=current_step.step_type,
+                    evaluated_rules=[],
+                    selected_next_step=str(original_step),
+                    status="completed",
+                    approver_id=user.id,
+                    approver_role=user.role,
+                    started_at=task.created_at,
+                    ended_at=task.completed_at
+                )
+                
+                # Clear original_step_for_task as we're now returning to it
+                execution.original_step_for_task = None
+                
+                # Set up pending approval from the original step's approval type
+                approval_type_map = {
+                    "manager_approval": "manager",
+                    "finance_approval": "finance",
+                    "ceo_approval": "ceo",
+                    "general": "general"
+                }
+                execution.pending_approval_from = approval_type_map.get(original_step.approval_type, "general")
+                execution.pending_task_from = None
+                execution.status = "pending"
+                execution.current_step = original_step
+                execution.save()
+                
+                # Notify approver that task is completed and needs re-approval
+                try:
+                    notify_approval_required(execution)
+                    send_approval_required_email(execution)
+                except Exception:
+                    pass
+            else:
+                # Normal flow: get the next step based on rules
+                next_step, evaluated_rules = get_next_step(current_step, execution.data)
+                
+                # Log the task completion
+                ExecutionLog.objects.create(
+                    execution=execution,
+                    step_name=current_step.name,
+                    step_type=current_step.step_type,
+                    evaluated_rules=evaluated_rules,
+                    selected_next_step=str(next_step) if next_step else None,
+                    status="completed",
+                    approver_id=user.id,
+                    approver_role=user.role,
+                    started_at=task.created_at,
+                    ended_at=task.completed_at
+                )
+                
+                # Clear pending fields when moving to next step
+                execution.pending_approval_from = None
+                execution.pending_task_from = None
+                
+                # Update execution with next step
+                execution.current_step = next_step
+                execution.save()
+                
+                # Continue processing the execution
+                from .engine import process_execution
+                process_execution(execution)
         
         # Return the updated task
         task_serializer = TaskSerializer(task)
