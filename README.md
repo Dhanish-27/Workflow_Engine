@@ -1,10 +1,33 @@
 # Workflow Engine - Role-Based Workflow Automation System
 
-> 🎬 **Check out the live demo of the project below!**
+## 🚀 Live Demo
+
+🌐 **Try the application here:**  
+👉 https://halleyxchallenge.netlify.app/
+
+---
+
+## 🔐 Demo Login Credentials
+
+You can log in using any of the following users:
+
+| Role      | Email                | Password     |
+|-----------|---------------------|--------------|
+| Finance   | finance@gmail.com   | admin@123    |
+| Manager   | manager@gmail.com   | admin@123    |
+| CEO       | ceo@gmail.com       | admin@123    |
+| Employee  | employee@gmail.com  | admin@123    |
+| Admin     | admin@gmail.com     | admin@123    |
+
+> ⚠️ Note: All users share the same password for demo purposes.
+
+---
+
+## 🎥 Demo Video
 
 [![Watch Demo](https://img.shields.io/badge/Watch-Demo-red?style=for-the-badge&logo=youtube)](https://youtu.be/R486nuO6xaw?si=VJ5MUXUUIBVV6RQi)
 
-
+---
 
 <p align="center">
   <img src="https://img.shields.io/badge/Django-5.0+-092E20?style=for-the-badge&logo=django" alt="Django">
